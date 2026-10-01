@@ -19,6 +19,14 @@ core_competencies:
   - product launch
   - value proposition
 
+business_model_focus:
+  - b2c
+  - b2b2c
+  - consumer
+  - direct-to-consumer
+  - d2c
+  - grand public
+
 target_industries:
   - insurance
   - energy
@@ -65,7 +73,8 @@ search:
 
 scoring:
   industry_boost: 1.0
-  competency_match_boost: 2.0  # Big reward for matching positioning/sales enablement/GTM
+  competency_match_boost: 2.0
+  b2c_boost: 1.5
   location_boost:
-    local_hub: 1.0             # Chamonix, Annecy, Geneva get a slight gentle nudge
-    france_or_remote: 0.5      # Rest of France and Europe remote are fully welcomed
+    local_hub: 1.0
+    france_or_remote: 0.5
