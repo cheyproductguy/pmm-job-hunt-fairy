@@ -1,0 +1,79 @@
+target_titles:
+  - Product Marketing Manager
+  - PMM
+  - Go-to-Market Manager
+  - GTM Manager
+  - Product Marketing Lead
+
+target_industries:
+  - insurance
+  - energy
+  - tech
+  - health
+
+locations:
+  france:
+    country_code: fr
+    preferred: [Chamonix, Haute-Savoie, Annecy]
+    workplace_models: [hybrid, in-office]
+    commute_hubs: [Geneva, Genève]
+  switzerland:
+    country_code: ch
+    preferred: [Geneva, Genève]
+    workplace_models: [hybrid, in-office]
+    visa_sponsorship_required: true
+    visa_sponsorship_signals: [visa sponsorship, work permit sponsorship, sponsorship available, permis de travail, sponsoring visa]
+  include_remote: true
+
+language_rules:
+  candidate_english: native
+  candidate_french: professional
+  accepted_posting_languages: [English, French]
+  require_english_role_signal: true
+  english_role_signals:
+    - English required
+    - fluent English
+    - native English
+    - C1 English
+    - C2 English
+    - English-first
+    - working language is English
+    - English-speaking environment
+    - anglais courant
+    - anglais bilingue
+    - anglais langue maternelle
+    - anglais C1
+    - anglais C2
+    - environnement anglophone
+    - anglais professionnel
+
+negative_keywords:
+  - director
+  - vp
+  - chief marketing officer
+  - cmo
+  - intern
+  - alternance
+  - stage
+  - jeune diplome
+  - hardware
+  - engineering
+  - marops
+  - marketing operations
+
+notification_email: chey.jobbot@gmail.com
+
+search:
+  results_per_query: 30
+  pages: 2
+  max_age_days: 30
+  minimum_fit_score: 3.5
+
+scoring:
+  keyword_overlap_max: 6.0
+  industry_boost: 1.5
+  workplace:
+    local_hybrid_or_office: 2.5
+    geneva_hybrid_or_office: 2.5
+    remote: 1.0
+    other: 0.5
