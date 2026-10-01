@@ -1,27 +1,35 @@
-Cheyenne Kuckein — Product Marketing Manager
-Based in Chamonix, France; immediate mobility.
+=== PROFESSIONAL PROFILE / PROFIL PROFESSIONNEL ===
 
-PROFILE
-Product marketing professional with 7+ years of experience across technology, energy, and insurance. Bilingual: native English and professional French. B2C/B2B2C expertise with experience launching offers and scaling go-to-market programs internationally.
+[ENGLISH]
+Bilingual Product Marketing Manager (Native English, Professional French) with 7+ years of B2C and B2B2C experience scaling high-growth companies across tech, insurance, and energy sectors. Expert in driving Go-to-Market (GTM) strategies, product positioning, messaging, and sales enablement. Proven track record of bridging product development and revenue generation through deep user research, competitive intelligence, and high-impact product launches. Based near Geneva / Chamonix, open to local, hybrid, and remote Europe-wide roles.
 
-CORE STRENGTHS
-- Go-to-market strategy and execution
-- Product positioning, portfolio positioning, messaging, and value propositions
-- User research, market research, Voice of Customer (VoC), and Jobs-to-be-Done (JTBD)
-- Customer feedback analysis, segmentation, and win/loss analysis
-- Sales enablement: battlecards, training, sales kits, and launch assets
-- Cross-functional collaboration with Product, Marketing, Design, Development, Sales, and Support
-- Full-funnel campaigns, CRM, customer growth, and retention
+[FRANÇAIS]
+Product Marketing Manager bilingue (Anglais natif, Français professionnel) avec 7+ ans d'expérience en B2C et B2B2C dans la scale-up et l'entreprise (tech, assurance, énergie). Experte dans le pilotage des stratégies Go-to-Market (GTM), le positionnement produit, le messaging et le sales enablement. Solide expérience dans l'alignement entre l'équipe produit et l'équipe commerciale grâce à la recherche utilisateur, l'analyse concurrentielle et des lancements d'offres à fort impact. Basée près de Genève / Chamonix, ouverte aux postes locaux, hybrides et en télétravail en Europe.
 
-INDUSTRY EXPERIENCE
-- Technology and digital consumer products: Product Marketing Manager at Pictarine, supporting a consumer photo-printing portfolio across the US, France, UK, and Canada. Used VoC and JTBD research to improve positioning and CSAT from 4.3 to 4.7 in three months; helped reduce photo-book returns by 33%.
-- Health and travel insurance: Digital Marketing Manager and Assistant Marketing Manager at Pacific Blue Cross. Led GTM positioning, market research, segmentation, win/loss analysis, and sales enablement. Contributed to a record 100,000+ travel policies issued, 50% lower digital display CAC, and 2x paid-social engagement.
-- Energy: Product Marketing Consultant at BC Hydro. Conducted 100+ qualitative interviews, localized messaging and GTM plans, reduced CAC by 50% in pilot markets, and launched North America's first Peak Saver small-business program.
-- B2B digital media: Business development experience at PressReader.
 
-LANGUAGES
-- English: native
-- French: professional working proficiency
+=== CORE COMPETENCIES / DOMAINES D'EXPERTISE ===
+- Go-to-Market (GTM) Strategy & Execution / Stratégies GTM
+- Product Positioning & Messaging / Positionnement & Messaging Produit
+- Sales Enablement & Sales Collateral / Sales Enablement & Outils de Vente
+- User & Market Research / Recherche Utilisateur & Marché
+- Product Launches & Lifecycle Management / Lancements de Produits
+- Business Models: B2C & B2B2C / Modèles Économiques : B2C & B2B2C
+- Cross-functional Leadership (Product, Sales, Marketing, Execs)
 
-EDUCATION AND TOOLS
-BBA in Marketing, Capilano University; international exchange at EM Normandie. Product Management certification (BrainStation). Tools include Dynamics CRM, Mailchimp, GA4, Looker Studio, Airtable, Notion, Figma, Slack, Ahrefs, SEMrush, and generative AI tools.
+
+=== INDUSTRY EXPERIENCE / EXPÉRIENCE SECTORIELLE ===
+- Tech / SaaS & Mobile Applications (B2C / B2B2C growth, user acquisition, retention messaging)
+- Insurance / InsurTech (Value proposition design, consumer trust, product launches)
+- Energy / Green Tech (Market expansion, consumer messaging for sustainable solutions)
+
+
+=== KEY PROFESSIONAL HIGHLIGHTS / RÉALISATIONS CLÉS ===
+- Led end-to-end Go-to-Market strategies and multi-channel product launches for international markets in both English and French.
+- Created robust sales enablement frameworks, training materials, and pitch assets that empowered sales teams to close deals faster.
+- Conducted ongoing user research and customer interviews to refine positioning, value propositions, and core product messaging.
+- Successfully orchestrated cross-functional alignment between product engineering, marketing, and sales leadership.
+
+
+=== LANGUAGES & LOCATION / LANGUES & LOCALISATION ===
+- Languages: English (Native / Anglais natif), French (Professional / Français professionnel)
+- Location: Chamonix / Geneva hub (Commutable to Geneva, Annecy, Lyon, Paris) | Remote Europe
