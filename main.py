@@ -127,7 +127,7 @@ def score_and_filter_jobs(jobs, config):
     if any(loc in location_name for loc in local_hubs):
       score += 1.0
     else:
-      score += 0.5  |# Nationwide France or Europe remote
+      score += 0.5  # Nationwide France or Europe remote
 
     if score >= min_score:
       job["score"] = round(score, 1)
