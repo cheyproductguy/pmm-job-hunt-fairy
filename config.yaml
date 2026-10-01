@@ -4,9 +4,20 @@ target_titles:
   - Go-to-Market Manager
   - GTM Manager
   - Product Marketing Lead
-  - Specialiste Marketing Produit
+  - Chef de Produit
   - Responsable Marketing Produit
+  - Growth Manager
+  - Product Lead
   - Marketing Manager
+
+core_competencies:
+  - positioning
+  - sales enablement
+  - go-to-market
+  - gtm
+  - product messaging
+  - product launch
+  - value proposition
 
 target_industries:
   - insurance
@@ -17,22 +28,18 @@ target_industries:
 locations:
   france:
     country_code: fr
-    preferred: [Chamonix, Haute-Savoie, Annecy, Lyon, Paris]
     workplace_models: [hybrid, in-office, remote]
-    commute_hubs: [Geneva, Genève]
   switzerland:
     country_code: ch
     preferred: [Geneva, Genève]
     workplace_models: [hybrid, in-office]
-    visa_sponsorship_required: true
-    visa_sponsorship_signals: [visa sponsorship, work permit sponsorship, sponsorship available, permis de travail, sponsoring visa]
   include_remote: true
 
 language_rules:
   candidate_english: native
   candidate_french: professional
   accepted_posting_languages: [English, French]
-  require_english_role_signal: false  # Relaxed so bilingual/French listings aren't blocked
+  require_english_role_signal: false
 
 negative_keywords:
   - director
@@ -54,12 +61,11 @@ search:
   results_per_query: 40
   pages: 2
   max_age_days: 30
-  minimum_fit_score: 3.0  # Lowered slightly to catch more borderline matches
+  minimum_fit_score: 3.0
 
 scoring:
-  keyword_overlap_max: 6.0
-  industry_boost: 2.0
-  workplace:
-    local_preferred: 3.5      # Heavy boost for Chamonix, Annecy, Geneva
-    france_nationwide: 1.5    # Moderate score for rest of France
-    remote: 2.0
+  industry_boost: 1.0
+  competency_match_boost: 2.0  # Big reward for matching positioning/sales enablement/GTM
+  location_boost:
+    local_hub: 1.0             # Chamonix, Annecy, Geneva get a slight gentle nudge
+    france_or_remote: 0.5      # Rest of France and Europe remote are fully welcomed
