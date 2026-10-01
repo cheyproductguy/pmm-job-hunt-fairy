@@ -3,6 +3,7 @@ import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from openai import OpenAI
 import requests
 import yaml
 
@@ -10,6 +11,21 @@ import yaml
 def load_config():
   with open("config.yaml", "r", encoding="utf-8") as f:
     return yaml.safe_load(f)
+
+
+def load_cv():
+  if os.path.exists("cv.txt"):
+    try:
+      with open("cv.txt", "r", encoding="utf-8") as f:
+        return f.read()
+    except Exception:
+      pass
+  # Fallback default CV context if cv.txt is missing
+  return (
+      "Bilingual Product Marketing Manager (Native English, Professional "
+      "French) with 7+ years of experience across tech, insurance, and "
+      "energy. Expert in GTM, positioning, and sales enablement."
+  )
 
 
 def load_history():
@@ -79,6 +95,9 @@ def score_and_filter_jobs(jobs, config):
   competencies = [
       comp.lower() for comp in config.get("core_competencies", [])
   ]
+  b2c_keywords = [
+      kw.lower() for kw in config.get("business_model_focus", [])
+  ]
 
   scored_listings = []
   seen_ids = set()
@@ -93,29 +112,24 @@ def score_and_filter_jobs(jobs, config):
     description = job.get("description", "").lower()
     location_name = job.get("location", {}).get("display_name", "").lower()
 
-    # Skip negative keywords
     if any(neg in title or neg in description for neg in negative_keywords):
       continue
 
-    # CONTENT-FIRST CHECK: Must contain at least ONE core PMM competency in the description
-    # (e.g., positioning, sales enablement, go-to-market, etc.)
     matched_competencies = [
         comp for comp in competencies if comp in description
     ]
     if not matched_competencies:
-      continue  # Skip jobs that lack core PMM responsibilities
+      continue
 
-    # Base score for passing core competency check
     score = 4.0
-
-    # Reward for multiple core competencies
     score += min(len(matched_competencies) * 0.5, 1.5)
 
-    # Industry boost
     if any(ind in description for ind in industries):
       score += 1.0
 
-    # Balanced Location Boost (Local hubs get a small nod; France/Remote fully welcome)
+    if any(kw in description or kw in title for kw in b2c_keywords):
+      score += 1.5
+
     local_hubs = [
         "chamonix",
         "annecy",
@@ -142,6 +156,34 @@ def score_and_filter_jobs(jobs, config):
   return scored_listings
 
 
+def get_ai_rationale(job, cv_text):
+  api_key = os.environ.get("OPENAI_API_KEY")
+  if not api_key:
+    return "AI rationale unavailable (Missing OPENAI_API_KEY secret)."
+
+  client = OpenAI(api_key=api_key)
+  prompt = f"""You are an expert career coach. Based on the candidate's extended CV profile and this job description, write a punchy, 2-sentence rationale explaining why this is a strong match for a Product Marketing Manager / GTM role, and clearly highlight any potential gaps (such as location, industry, or specific requirements).
+
+Candidate Background:
+{cv_text}
+
+Job Title: {job.get('title')}
+Company: {job.get('company', 'Unknown')}
+Location: {job.get('location_str', 'Unknown')}
+Job Description: {job.get('description', '')[:1200]}
+"""
+  try:
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=150,
+        temperature=0.3,
+    )
+    return response.choices[0].message.content.strip()
+  except Exception as e:
+    return f"AI rationale generation error: {e}"
+
+
 def send_html_email(scored_jobs):
   sender = os.environ.get("GMAIL_ADDRESS")
   password = os.environ.get("GMAIL_APP_PASSWORD")
@@ -153,7 +195,7 @@ def send_html_email(scored_jobs):
 
   msg = MIMEMultipart("alternative")
   msg["Subject"] = (
-      f"🚀 Daily PMM Radar: {len(scored_jobs)} Fresh Matches Found"
+      f"🚀 Daily PMM Radar: {len(scored_jobs)} Curated Matches Found"
   )
   msg["From"] = sender
   msg["To"] = recipient
@@ -167,7 +209,12 @@ def send_html_email(scored_jobs):
             </h2>
             <p style="margin: 0 0 10px 0; color: #586069; font-size: 14px;"><strong>Company:</strong> {job.get('company')} | <strong>Location:</strong> {job.get('location_str')}</p>
             <p style="margin: 0 0 15px 0;"><span style="background-color: #28a745; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">Fit Score: {job.get('score')}</span></p>
-            <p style="margin: 0; color: #24292e; font-size: 14px; line-height: 1.5;">{job.get('description', '')[:250]}...</p>
+            
+            <blockquote style="margin: 0 0 15px 0; padding: 12px 15px; border-left: 4px solid #0366d6; background-color: #f6f8fa; color: #24292e; font-size: 14px; border-radius: 0 4px 4px 0; line-height: 1.4;">
+                <strong>Coach Rationale:</strong> {job.get('rationale', 'No rationale generated.')}
+            </blockquote>
+
+            <p style="margin: 0; color: #586069; font-size: 13px; line-height: 1.4;">{job.get('description', '')[:200]}...</p>
         </div>
         """
 
@@ -176,9 +223,9 @@ def send_html_email(scored_jobs):
         <body style="background-color: #f1f8fc; padding: 20px;">
             <div style="max-width: 600px; margin: auto;">
                 <h1 style="color: #24292e; font-size: 22px; text-align: center;">🎯 Daily PMM Job Matches</h1>
-                <p style="color: #586069; text-align: center; font-size: 14px;">Here are your top curated matches tailored for Geneva & France today.</p>
+                <p style="color: #586069; text-align: center; font-size: 14px;">Curated matches tailored for your positioning, GTM, and B2C/B2B2C profile.</p>
                 {cards_html}
-                <p style="text-align: center; color: #6a737d; font-size: 12px; margin-top: 30px;">Generated automatically by your PMM Job Hunter GitHub Action.</p>
+                <p style="text-align: center; color: #6a737d; font-size: 12px; margin-top: 30px;">Generated automatically by your AI-powered PMM Job Hunter.</p>
             </div>
         </body>
     </html>
@@ -212,6 +259,12 @@ def main():
 
   if fresh_jobs:
     top_jobs = fresh_jobs[:10]
+    cv_text = load_cv()
+
+    print("Generating AI rationales for top matches...")
+    for job in top_jobs:
+      job["rationale"] = get_ai_rationale(job, cv_text)
+
     send_html_email(top_jobs)
 
     for j in top_jobs:
