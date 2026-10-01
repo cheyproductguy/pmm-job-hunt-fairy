@@ -2,37 +2,25 @@ name: Daily PMM Job Hunter
 
 on:
   schedule:
-    - cron: '0 7 * * *'
-      timezone: Europe/Paris
-  workflow_dispatch:
-
-permissions:
-  contents: read
+    - cron: '0 7 * * *' # Runs daily at 7:00 AM UTC
+  workflow_dispatch: # Allows manual runs
 
 jobs:
-  find-and-email:
+  run-job-hunter:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - name: Check out repository
+      - name: Checkout repository code
         uses: actions/checkout@v4
-
-      - name: Restore sent-job history
-        uses: actions/cache/restore@v4
-        with:
-          path: .job_history.json
-          key: job-history-${{ github.run_id }}
-          restore-keys: job-history-
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-          cache: pip
+          python-version: '3.10'
 
-      - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+      - name: Install dependencies directly
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests PyYAML openai
 
       - name: Search, score, and email fresh matches
         env:
@@ -41,11 +29,5 @@ jobs:
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           JOB_ALERT_EMAIL: ${{ secrets.JOB_ALERT_EMAIL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: python main.py
-
-      - name: Save sent-job history
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: .job_history.json
-          key: job-history-${{ github.run_id }}
