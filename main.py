@@ -1,9 +1,8 @@
-"""Find, score, deduplicate, and email relevant PMM roles from Adzuna."""
+"""Find, score, and email the best relevant PMM roles from Adzuna."""
 
 from __future__ import annotations
 
 import html
-import json
 import logging
 import os
 import re
@@ -26,7 +25,6 @@ import yaml
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config.yaml"
 CV_PATH = ROOT / "cv.txt"
-HISTORY_PATH = Path(os.getenv("JOB_HISTORY_PATH", ROOT / ".job_history.json"))
 ADZUNA_URL = "https://api.adzuna.com/v1/api/jobs/{country}/search/{page}"
 LOG = logging.getLogger("pmm_job_hunter")
 REQUEST_TIMEOUT = 25
@@ -62,27 +60,6 @@ def load_config() -> dict[str, Any]:
     ):
         raise ValueError("config.yaml must define target_titles and title-exclusion keywords")
     return config
-
-
-def load_history() -> set[str]:
-    try:
-        with HISTORY_PATH.open("r", encoding="utf-8") as stream:
-            data = json.load(stream)
-        if isinstance(data, list):  # migrate history written by the older script
-            return {str(item) for item in data}
-        return set(data.get("sent_ids", []))
-    except FileNotFoundError:
-        return set()
-    except (json.JSONDecodeError, OSError) as exc:
-        LOG.warning("Could not read history (%s); starting with empty history", exc)
-        return set()
-
-
-def save_history(sent_ids: set[str]) -> None:
-    HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    temporary = HISTORY_PATH.with_suffix(".tmp")
-    temporary.write_text(json.dumps({"sent_ids": sorted(sent_ids)}, indent=2), encoding="utf-8")
-    temporary.replace(HISTORY_PATH)
 
 
 def job_text(job: dict[str, Any]) -> str:
@@ -419,18 +396,17 @@ def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[
     return round(total, 1), matched
 
 
-def filter_and_score(jobs: list[dict[str, Any]], config: dict[str, Any], history: set[str]) -> list[dict[str, Any]]:
+def filter_and_score(jobs: list[dict[str, Any]], config: dict[str, Any]) -> list[dict[str, Any]]:
     negatives = [normalize(item) for item in config.get("negative_title_keywords", config.get("negative_keywords", []))]
     max_age = int(config.get("search", {}).get("max_age_days", 30))
     minimum = float(config.get("search", {}).get("minimum_fit_score", 0))
-    fresh: list[dict[str, Any]] = []
+    matches: list[dict[str, Any]] = []
     seniority_excluded = 0
     for job in jobs:
-        text = normalize(job_text(job))
         title = normalize(str(job.get("title", "")))
         if any(word in title for word in negatives):
             continue
-        if not is_recent(job, max_age) or job_identifier(job) in history:
+        if not is_recent(job, max_age):
             continue
         seniority_reason = excessive_experience_requirement(job_text(job), config)
         if seniority_reason:
@@ -444,10 +420,10 @@ def filter_and_score(jobs: list[dict[str, Any]], config: dict[str, Any], history
             continue
         job["fit_score"] = score
         job["matched_keywords"] = matched
-        fresh.append(job)
+        matches.append(job)
     if seniority_excluded:
         LOG.info("Screened out %d listing(s) for explicit experience minimums", seniority_excluded)
-    return sorted(fresh, key=lambda job: (-job["fit_score"], str(job.get("created", ""))))
+    return sorted(matches, key=lambda job: (-job["fit_score"], str(job.get("created", ""))))
 
 
 def safe_url(value: str) -> str:
@@ -527,8 +503,8 @@ def format_email(jobs: list[dict[str, Any]]) -> tuple[str, str]:
         )
     html_body = (
         "<html><body style='font-family:Arial,sans-serif;color:#101828;max-width:900px;margin:auto'>"
-        f"<h2>Fresh Product Marketing roles — {date_label}</h2>"
-        f"<p>Found {len(jobs)} new role(s), sorted by fit score.</p>"
+        f"<h2>Top Product Marketing job matches — {date_label}</h2>"
+        f"<p>Top {len(jobs)} eligible role(s), sorted by fit score.</p>"
         "<table style='border-collapse:collapse;width:100%'><thead><tr>"
         "<th align='left' style='padding:12px'>Role and company</th>"
         "<th align='left' style='padding:12px'>Location</th>"
@@ -536,7 +512,7 @@ def format_email(jobs: list[dict[str, Any]]) -> tuple[str, str]:
         + "".join(rows)
         + "</tbody></table></body></html>"
     )
-    plain = f"Fresh Product Marketing roles — {date_label}\nFound {len(jobs)} new role(s).\n\n" + "\n\n".join(plain_rows)
+    plain = f"Top Product Marketing job matches — {date_label}\nTop {len(jobs)} eligible role(s), sorted by fit score.\n\n" + "\n\n".join(plain_rows)
     return plain, html_body
 
 
@@ -548,7 +524,7 @@ def send_email(jobs: list[dict[str, Any]], recipient: str) -> None:
     plain, rich = format_email(jobs)
     message = EmailMessage()
     paris_now = datetime.now(ZoneInfo("Europe/Paris"))
-    message["Subject"] = f"{len(jobs)} fresh PMM job match(es) — {paris_now:%d %b}"
+    message["Subject"] = f"Top {len(jobs)} PMM job matches — {paris_now:%d %b}"
     message["From"] = sender
     message["To"] = recipient
     message.set_content(plain)
@@ -565,12 +541,11 @@ def main() -> int:
     recipient = os.getenv("JOB_ALERT_EMAIL") or config.get("notification_email")
     if not recipient:
         raise RuntimeError("Set JOB_ALERT_EMAIL or notification_email in config.yaml")
-    history = load_history()
     jobs = search_adzuna(config)
-    matches = filter_and_score(jobs, config, history)
-    LOG.info("Fetched %d unique listings; %d fresh listings passed filters", len(jobs), len(matches))
+    matches = filter_and_score(jobs, config)
+    LOG.info("Fetched %d unique listings; %d listings passed filters", len(jobs), len(matches))
     if not matches:
-        LOG.info("No fresh matches to email")
+        LOG.info("No listings passed the configured filters")
         return 0
     max_email_results = max(1, int(config.get("search", {}).get("max_email_results", 8)))
     email_jobs = matches[:max_email_results]
@@ -583,9 +558,7 @@ def main() -> int:
             if rationale:
                 job["rationale"] = rationale
     send_email(email_jobs, recipient)
-    history.update(job_identifier(job) for job in email_jobs)
-    save_history(history)
-    LOG.info("Emailed %d fresh matches to %s", len(email_jobs), recipient)
+    LOG.info("Emailed the top %d matches to %s", len(email_jobs), recipient)
     return 0
 
 

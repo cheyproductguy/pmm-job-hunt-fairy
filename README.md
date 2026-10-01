@@ -4,9 +4,9 @@
 
 PMM Job Hunter is a daily job-finding assistant for Cheyenne's search across product marketing and adjacent roles. It looks for work in France and Geneva that uses strengths in go-to-market strategy, customer research, positioning, growth, energy efficiency, insurance, and regional marketing—even when the job title does not say “Product Marketing Manager.”
 
-Each new listing is scored against a configurable experience profile and emailed as a sorted digest. The active `adjacent_discovery` profile gives transferable responsibilities and role scope more weight, making it easier to spot relevant opportunities under unfamiliar titles. Remote roles are included but rank below suitable Chamonix-area and Geneva hybrid or office roles.
+Eligible listings are scored against a configurable experience profile, and the top eight are emailed as a sorted digest each day. Listings can appear in more than one daily digest while they remain in Adzuna's results and meet the criteria. The active `adjacent_discovery` profile gives transferable responsibilities and role scope more weight, making it easier to spot relevant opportunities under unfamiliar titles. Remote roles are included but rank below suitable Chamonix-area and Geneva hybrid or office roles.
 
-When `OPENAI_API_KEY` is configured, the digest can also include a short, evidence-based fit rationale for up to ten top-scoring roles. This is optional; searching and email delivery do not depend on it.
+When `OPENAI_API_KEY` is configured, the digest can also include a short, evidence-based fit rationale for the top-scoring roles in the email. This is optional; searching and email delivery do not depend on it.
 
 GitHub Actions can run the search daily at 7:00 AM Paris time. The application uses Adzuna for job listings and Gmail SMTP for the digest.
 
@@ -30,7 +30,7 @@ Install and run locally with Python 3.10+:
 python -m pip install -r requirements.txt
 ```
 
-Set the five environment variables above, then run `python main.py`. Adzuna credentials are required for searching. Gmail credentials are only required when there are fresh matches to email. The local `.job_history.json` file tracks postings already emailed; GitHub Actions preserves it between runs with its cache.
+Set the five environment variables above, then run `python main.py`. Adzuna credentials are required for searching. Gmail credentials are required when qualifying listings are found.
 
 Edit `config.yaml` to adjust titles, locations, thresholds, and scoring. `cv.txt` is the matching profile and can be tailored as the CV changes.
 
@@ -40,7 +40,7 @@ The app searches configured English and French queries plus title variants, so r
 
 Competencies, industries, business models, location/workplace, language signals, and sponsorship evidence are scored as separate dimensions. English and French phrase variants are accent-insensitive. English-first roles rank well, French postings remain eligible, and unspecified language requirements receive a neutral score. Geneva visa sponsorship evidence improves fit; it is not a hard filter unless `visa_sponsorship.required` is changed to `true`.
 
-Seniority screening excludes explicit 10+ year overall requirements and mandatory experience in a **pure B2B** role (with or without a numeric year count). Mixed B2B/B2C and B2B2C requirements remain eligible; preferred/desirable experience is not treated as mandatory. The daily digest is capped at the top eight matches (`search.max_email_results`), so optional AI rationales are generated only for those roles.
+Seniority screening excludes explicit 10+ year overall requirements and mandatory experience in a **pure B2B** role (with or without a numeric year count). Mixed B2B/B2C and B2B2C requirements remain eligible; preferred/desirable experience is not treated as mandatory. The daily digest is capped at the top eight matches (`search.max_email_results`), so optional AI rationales are generated only for those roles. The same listing may be emailed again on later days if it still appears in Adzuna and passes the filters. Listings older than `search.max_age_days` are excluded.
 
 Fit scores are normalized to 10. `scoring.active_profile` selects `balanced`, `cv_evidence`, or `adjacent_discovery`; adjust `search.minimum_fit_score` to control how selective the email is. Chamonix-area and Geneva hybrid/in-office roles rank above remote roles.
 
