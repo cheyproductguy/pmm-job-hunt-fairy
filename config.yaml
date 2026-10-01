@@ -328,7 +328,8 @@ search:
   max_retry_delay_seconds: 30
   max_consecutive_failed_pages: 4
   max_age_days: 30
-  minimum_fit_score: 4.5
+  # Keep adjacent and transferable matches in the digest; the email remains capped at 8.
+  minimum_fit_score: 3.0
   max_email_results: 8
 
 # Only explicit minimums at or above these ceilings are screened out.
