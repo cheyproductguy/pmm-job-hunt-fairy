@@ -76,6 +76,9 @@ def score_and_filter_jobs(jobs, config):
       kw.lower() for kw in config.get("negative_keywords", [])
   ]
   industries = [ind.lower() for ind in config.get("target_industries", [])]
+  competencies = [
+      comp.lower() for comp in config.get("core_competencies", [])
+  ]
 
   scored_listings = []
   seen_ids = set()
@@ -94,27 +97,37 @@ def score_and_filter_jobs(jobs, config):
     if any(neg in title or neg in description for neg in negative_keywords):
       continue
 
-    # Base scoring logic
+    # CONTENT-FIRST CHECK: Must contain at least ONE core PMM competency in the description
+    # (e.g., positioning, sales enablement, go-to-market, etc.)
+    matched_competencies = [
+        comp for comp in competencies if comp in description
+    ]
+    if not matched_competencies:
+      continue  # Skip jobs that lack core PMM responsibilities
+
+    # Base score for passing core competency check
     score = 4.0
+
+    # Reward for multiple core competencies
+    score += min(len(matched_competencies) * 0.5, 1.5)
 
     # Industry boost
     if any(ind in description for ind in industries):
-      score += 1.5
+      score += 1.0
 
-    # Location priority boost
-    preferred_locs = [
+    # Balanced Location Boost (Local hubs get a small nod; France/Remote fully welcome)
+    local_hubs = [
         "chamonix",
         "annecy",
         "geneva",
         "genève",
         "haute-savoie",
-        "lyon",
-        "paris",
+        "annemasse",
     ]
-    if any(loc in location_name for loc in preferred_locs):
-      score += 2.5
-    else:
+    if any(loc in location_name for loc in local_hubs):
       score += 1.0
+    else:
+      score += 0.5  |# Nationwide France or Europe remote
 
     if score >= min_score:
       job["score"] = round(score, 1)
