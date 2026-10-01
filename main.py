@@ -1,278 +1,435 @@
+"""Find, score, deduplicate, and email relevant PMM roles from Adzuna."""
+
+from __future__ import annotations
+
+import html
 import json
+import logging
 import os
+import re
 import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from openai import OpenAI
+import ssl
+import sys
+import unicodedata
+from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
+
 import requests
 import yaml
 
 
-def load_config():
-  with open("config.yaml", "r", encoding="utf-8") as f:
-    return yaml.safe_load(f)
+ROOT = Path(__file__).resolve().parent
+CONFIG_PATH = ROOT / "config.yaml"
+CV_PATH = ROOT / "cv.txt"
+HISTORY_PATH = Path(os.getenv("JOB_HISTORY_PATH", ROOT / ".job_history.json"))
+ADZUNA_URL = "https://api.adzuna.com/v1/api/jobs/{country}/search/{page}"
+LOG = logging.getLogger("pmm_job_hunter")
+REQUEST_TIMEOUT = 25
+ACRONYM_SIGNALS = {"b2b", "b2c", "b2b2c", "d2c", "sme", "pme", "voc", "jtbd", "sdr", "bdr"}
+
+TITLE_SEARCH_TERMS = {
+    "Product Marketing Manager": ("Product Marketing Manager", "Responsable marketing produit"),
+    "PMM": ("PMM", "Product Marketing"),
+    "Go-to-Market Manager": ("Go-to-Market Manager", "Responsable go-to-market"),
+    "GTM Manager": ("GTM Manager", "Responsable GTM"),
+    "Product Marketing Lead": ("Product Marketing Lead", "Lead marketing produit"),
+    "Proposition Manager": ("Proposition Manager", "Responsable développement de l'offre"),
+    "Market Insights Manager": ("Market Insights Manager", "Responsable études marketing"),
+    "Customer Insights Manager": ("Customer Insights Manager", "Responsable insights clients"),
+    "Product Strategy Manager": ("Product Strategy Manager", "Stratégie produit"),
+    "Portfolio Marketing Manager": ("Portfolio Marketing Manager", "Marketing de portefeuille"),
+    "Growth Marketing Manager": ("Growth Marketing Manager", "Growth marketing"),
+    "Chef de produit": ("Chef de produit", "Product Manager"),
+}
 
 
-def load_cv():
-  if os.path.exists("cv.txt"):
+def normalize(text: str) -> str:
+    """Lowercase text and remove accents for bilingual substring matching."""
+    decomposed = unicodedata.normalize("NFKD", text.lower())
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+
+
+def load_config() -> dict[str, Any]:
+    with CONFIG_PATH.open("r", encoding="utf-8") as stream:
+        config = yaml.safe_load(stream) or {}
+    if not config.get("target_titles") or not (
+        config.get("negative_title_keywords") or config.get("negative_keywords")
+    ):
+        raise ValueError("config.yaml must define target_titles and title-exclusion keywords")
+    return config
+
+
+def load_history() -> set[str]:
     try:
-      with open("cv.txt", "r", encoding="utf-8") as f:
-        return f.read()
-    except Exception:
-      pass
-  # Fallback default CV context if cv.txt is missing
-  return (
-      "Bilingual Product Marketing Manager (Native English, Professional "
-      "French) with 7+ years of experience across tech, insurance, and "
-      "energy. Expert in GTM, positioning, and sales enablement."
-  )
+        with HISTORY_PATH.open("r", encoding="utf-8") as stream:
+            data = json.load(stream)
+        if isinstance(data, list):  # migrate history written by the older script
+            return {str(item) for item in data}
+        return set(data.get("sent_ids", []))
+    except FileNotFoundError:
+        return set()
+    except (json.JSONDecodeError, OSError) as exc:
+        LOG.warning("Could not read history (%s); starting with empty history", exc)
+        return set()
 
 
-def load_history():
-  if os.path.exists(".job_history.json"):
-    try:
-      with open(".job_history.json", "r", encoding="utf-8") as f:
-        return json.load(f)
-    except Exception:
-      return []
-  return []
+def save_history(sent_ids: set[str]) -> None:
+    HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = HISTORY_PATH.with_suffix(".tmp")
+    temporary.write_text(json.dumps({"sent_ids": sorted(sent_ids)}, indent=2), encoding="utf-8")
+    temporary.replace(HISTORY_PATH)
 
 
-def save_history(history):
-  with open(".job_history.json", "w", encoding="utf-8") as f:
-    json.dump(history, f, indent=2)
-
-
-def fetch_adzuna_jobs(config):
-  all_jobs = []
-  app_id = os.environ.get("ADZUNA_APP_ID")
-  app_key = os.environ.get("ADZUNA_APP_KEY")
-
-  if not app_id or not app_key:
-    print("Error: Adzuna API credentials missing.")
-    return []
-
-  locations = config.get("locations", {})
-  titles = config.get("target_titles", ["Product Marketing Manager"])
-  results_per_query = config.get("search", {}).get("results_per_query", 40)
-  max_pages = config.get("search", {}).get("pages", 2)
-
-  for country_key, country_data in locations.items():
-    if country_key == "include_remote":
-      continue
-    country_code = country_data.get("country_code", "fr")
-
-    for title in titles:
-      for page in range(1, max_pages + 1):
-        url = f"https://api.adzuna.com/v1/api/jobs/{country_code}/search/{page}"
-        params = {
-            "app_id": app_id,
-            "app_key": app_key,
-            "what": title,
-            "results_per_page": results_per_query,
-            "content-type": "application/json",
-        }
-        try:
-          response = requests.get(url, params=params, timeout=10)
-          if response.status_code == 200:
-            data = response.json()
-            results = data.get("results", [])
-            for job in results:
-              job["search_country"] = country_key
-              all_jobs.append(job)
-        except Exception as e:
-          print(f"Error fetching {title} in {country_code}: {e}")
-
-  return all_jobs
-
-
-def score_and_filter_jobs(jobs, config):
-  min_score = config.get("search", {}).get("minimum_fit_score", 3.0)
-  negative_keywords = [
-      kw.lower() for kw in config.get("negative_keywords", [])
-  ]
-  industries = [ind.lower() for ind in config.get("target_industries", [])]
-  competencies = [
-      comp.lower() for comp in config.get("core_competencies", [])
-  ]
-  b2c_keywords = [
-      kw.lower() for kw in config.get("business_model_focus", [])
-  ]
-
-  scored_listings = []
-  seen_ids = set()
-
-  for job in jobs:
-    job_id = str(job.get("id"))
-    if not job_id or job_id in seen_ids:
-      continue
-    seen_ids.add(job_id)
-
-    title = job.get("title", "").lower()
-    description = job.get("description", "").lower()
-    location_name = job.get("location", {}).get("display_name", "").lower()
-
-    if any(neg in title or neg in description for neg in negative_keywords):
-      continue
-
-    matched_competencies = [
-        comp for comp in competencies if comp in description
-    ]
-    if not matched_competencies:
-      continue
-
-    score = 4.0
-    score += min(len(matched_competencies) * 0.5, 1.5)
-
-    if any(ind in description for ind in industries):
-      score += 1.0
-
-    if any(kw in description or kw in title for kw in b2c_keywords):
-      score += 1.5
-
-    local_hubs = [
-        "chamonix",
-        "annecy",
-        "geneva",
-        "genève",
-        "haute-savoie",
-        "annemasse",
-    ]
-    if any(loc in location_name for loc in local_hubs):
-      score += 1.0
-    else:
-      score += 0.5  # Nationwide France or Europe remote
-
-    if score >= min_score:
-      job["score"] = round(score, 1)
-      job["url"] = job.get("redirect_url", "#")
-      job["company"] = job.get("company", {}).get("display_name", "Unknown")
-      job["location_str"] = job.get("location", {}).get(
-          "display_name", "Unknown"
-      )
-      scored_listings.append(job)
-
-  scored_listings.sort(key=lambda x: x["score"], reverse=True)
-  return scored_listings
-
-
-def get_ai_rationale(job, cv_text):
-  api_key = os.environ.get("OPENAI_API_KEY")
-  if not api_key:
-    return "AI rationale unavailable (Missing OPENAI_API_KEY secret)."
-
-  client = OpenAI(api_key=api_key)
-  prompt = f"""You are an expert career coach. Based on the candidate's extended CV profile and this job description, write a punchy, 2-sentence rationale explaining why this is a strong match for a Product Marketing Manager / GTM role, and clearly highlight any potential gaps (such as location, industry, or specific requirements).
-
-Candidate Background:
-{cv_text}
-
-Job Title: {job.get('title')}
-Company: {job.get('company', 'Unknown')}
-Location: {job.get('location_str', 'Unknown')}
-Job Description: {job.get('description', '')[:1200]}
-"""
-  try:
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=150,
-        temperature=0.3,
+def job_text(job: dict[str, Any]) -> str:
+    company = job.get("company", {})
+    location = job.get("location", {})
+    return " ".join(
+        [
+            str(job.get("title", "")),
+            str(job.get("description", "")),
+            str(job.get("category", "")),
+            str(company.get("display_name", "") if isinstance(company, dict) else company),
+            str(location.get("display_name", "") if isinstance(location, dict) else location),
+        ]
     )
-    return response.choices[0].message.content.strip()
-  except Exception as e:
-    return f"AI rationale generation error: {e}"
 
 
-def send_html_email(scored_jobs):
-  sender = os.environ.get("GMAIL_ADDRESS")
-  password = os.environ.get("GMAIL_APP_PASSWORD")
-  recipient = os.environ.get("JOB_ALERT_EMAIL")
-
-  if not sender or not password or not recipient:
-    print("Email credentials missing; skipping email dispatch.")
-    return
-
-  msg = MIMEMultipart("alternative")
-  msg["Subject"] = (
-      f"🚀 Daily PMM Radar: {len(scored_jobs)} Curated Matches Found"
-  )
-  msg["From"] = sender
-  msg["To"] = recipient
-
-  cards_html = ""
-  for job in scored_jobs:
-    cards_html += f"""
-        <div style="border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; margin-bottom: 20px; background-color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-            <h2 style="margin: 0 0 10px 0; color: #0366d6; font-size: 18px;">
-                <a href="{job.get('url', '#')}" target="_blank" style="text-decoration: none; color: #0366d6;">{job.get('title')}</a>
-            </h2>
-            <p style="margin: 0 0 10px 0; color: #586069; font-size: 14px;"><strong>Company:</strong> {job.get('company')} | <strong>Location:</strong> {job.get('location_str')}</p>
-            <p style="margin: 0 0 15px 0;"><span style="background-color: #28a745; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">Fit Score: {job.get('score')}</span></p>
-            
-            <blockquote style="margin: 0 0 15px 0; padding: 12px 15px; border-left: 4px solid #0366d6; background-color: #f6f8fa; color: #24292e; font-size: 14px; border-radius: 0 4px 4px 0; line-height: 1.4;">
-                <strong>Coach Rationale:</strong> {job.get('rationale', 'No rationale generated.')}
-            </blockquote>
-
-            <p style="margin: 0; color: #586069; font-size: 13px; line-height: 1.4;">{job.get('description', '')[:200]}...</p>
-        </div>
-        """
-
-  html_content = f"""
-    <html>
-        <body style="background-color: #f1f8fc; padding: 20px;">
-            <div style="max-width: 600px; margin: auto;">
-                <h1 style="color: #24292e; font-size: 22px; text-align: center;">🎯 Daily PMM Job Matches</h1>
-                <p style="color: #586069; text-align: center; font-size: 14px;">Curated matches tailored for your positioning, GTM, and B2C/B2B2C profile.</p>
-                {cards_html}
-                <p style="text-align: center; color: #6a737d; font-size: 12px; margin-top: 30px;">Generated automatically by your AI-powered PMM Job Hunter.</p>
-            </div>
-        </body>
-    </html>
-    """
-
-  msg.attach(MIMEText(html_content, "html"))
-
-  try:
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-      server.login(sender, password)
-      server.sendmail(sender, recipient, msg.as_string())
-    print("HTML email notification sent successfully!")
-  except Exception as e:
-    print(f"Failed to send email: {e}")
+def job_identifier(job: dict[str, Any]) -> str:
+    return str(job.get("id") or job.get("redirect_url") or job.get("title", "unknown"))
 
 
-def main():
-  config = load_config()
-  print("Fetching raw jobs from Adzuna...")
-  raw_jobs = fetch_adzuna_jobs(config)
-  print(f"Fetched {len(raw_jobs)} total listings.")
+def search_adzuna(config: dict[str, Any]) -> list[dict[str, Any]]:
+    app_id, app_key = os.getenv("ADZUNA_APP_ID"), os.getenv("ADZUNA_APP_KEY")
+    if not app_id or not app_key:
+        raise RuntimeError("Set ADZUNA_APP_ID and ADZUNA_APP_KEY environment variables")
 
-  scored = score_and_filter_jobs(raw_jobs, config)
-  print(f"{len(scored)} listings passed filter criteria.")
+    titles = config["target_titles"]
+    # Configured search_terms are curated for breadth. Add title aliases while
+    # enforcing a query ceiling to keep daily Adzuna API use predictable.
+    terms = list(dict.fromkeys(str(term) for term in config.get("search_terms", [])))
+    for title in titles:
+        for term in TITLE_SEARCH_TERMS.get(title, (title,)):
+            if term not in terms:
+                terms.append(term)
 
-  history = load_history()
-  history_set = set(history)
+    search_cfg = config.get("search", {})
+    per_page = int(search_cfg.get("results_per_query", 30))
+    pages = int(search_cfg.get("pages", 2))
+    max_queries = int(search_cfg.get("max_queries_per_country", 18))
+    terms = terms[:max_queries]
+    found: dict[str, dict[str, Any]] = {}
+    session = requests.Session()
+    for place in ("france", "switzerland"):
+        country = config["locations"][place]["country_code"]
+        for term in sorted(terms):
+            for page in range(1, pages + 1):
+                params = {
+                    "app_id": app_id,
+                    "app_key": app_key,
+                    "results_per_page": per_page,
+                    "what": term,
+                    "content-type": "application/json",
+                }
+                response = session.get(
+                    ADZUNA_URL.format(country=country, page=page),
+                    params=params,
+                    timeout=REQUEST_TIMEOUT,
+                )
+                response.raise_for_status()
+                for job in response.json().get("results", []):
+                    job["_country_code"] = country
+                    found.setdefault(job_identifier(job), job)
+    return list(found.values())
 
-  fresh_jobs = [j for j in scored if str(j.get("id")) not in history_set]
-  print(f"{len(fresh_jobs)} fresh (un-emailed) listings found.")
 
-  if fresh_jobs:
-    top_jobs = fresh_jobs[:10]
-    cv_text = load_cv()
+def contains_any(text: str, phrases: list[str] | tuple[str, ...]) -> bool:
+    normalized = normalize(text)
+    for phrase in phrases:
+        candidate = normalize(phrase)
+        if candidate in ACRONYM_SIGNALS:
+            if re.search(rf"(?<![a-z0-9]){re.escape(candidate)}(?![a-z0-9])", normalized):
+                return True
+        elif candidate in normalized:
+            return True
+    return False
 
-    print("Generating AI rationales for top matches...")
-    for job in top_jobs:
-      job["rationale"] = get_ai_rationale(job, cv_text)
 
-    send_html_email(top_jobs)
+def is_recent(job: dict[str, Any], max_age_days: int) -> bool:
+    created = job.get("created")
+    if not created:
+        return True
+    try:
+        parsed = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed >= datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    except ValueError:
+        return True
 
-    for j in top_jobs:
-      history.append(str(j.get("id")))
+
+def meets_language_rule(text: str, config: dict[str, Any]) -> bool:
+    language = config.get("language_rules", {})
+    if not language.get("require_english_role_signal", True):
+        return True
+    return contains_any(text, language.get("english_role_signals", []))
+
+
+def meets_switzerland_sponsorship(job: dict[str, Any], config: dict[str, Any]) -> bool:
+    if job.get("_country_code") != config["locations"]["switzerland"]["country_code"]:
+        return True
+    visa = config["locations"]["switzerland"].get("visa_sponsorship", {})
+    return not visa.get("required", False) or contains_any(job_text(job), visa.get("signals", []))
+
+
+def workplace_fit(job: dict[str, Any], config: dict[str, Any]) -> float:
+    text = normalize(job_text(job))
+    remote_signals = ("remote", "fully remote", "teletravail", "100% a distance", "work from anywhere")
+    hybrid_signals = ("hybrid", "hybride", "hybrid working")
+    office_signals = ("on-site", "onsite", "in-office", "office based", "sur site", "presentiel")
+    france = config["locations"]["france"]
+    geneva = config["locations"]["switzerland"]
+    has_workplace_model = contains_any(text, hybrid_signals + office_signals)
+    has_remote = contains_any(text, remote_signals)
+    if job.get("_country_code") == geneva["country_code"]:
+        location_match = contains_any(text, geneva.get("preferred", []))
+        if location_match and has_workplace_model:
+            return float(config.get("scoring", {}).get("workplace", {}).get("geneva_hybrid_or_office", 1.0))
+    location_match = contains_any(text, france.get("preferred", []) + france.get("commute_hubs", []))
+    if location_match and has_workplace_model:
+        return float(config.get("scoring", {}).get("workplace", {}).get("local_hybrid_or_office", 1.0))
+    workplace = config.get("scoring", {}).get("workplace", {})
+    if has_remote and config.get("locations", {}).get("include_remote", True):
+        return float(workplace.get("remote", 0.35))
+    if not has_workplace_model:
+        return float(workplace.get("unspecified", 0.45))
+    return float(workplace.get("other", 0.2))
+
+
+def language_fit(text: str, config: dict[str, Any]) -> float:
+    rules = config.get("language_rules", {})
+    scoring = config.get("scoring", {}).get("language", {})
+    if contains_any(text, rules.get("english_role_signals", [])):
+        return float(scoring.get("english_signal", 1.0))
+    if contains_any(text, rules.get("french_role_signals", [])):
+        return float(scoring.get("french_signal", 0.8))
+    return float(scoring.get("unspecified", 0.65))
+
+
+def visa_fit(job: dict[str, Any], config: dict[str, Any]) -> float:
+    if job.get("_country_code") != config["locations"]["switzerland"]["country_code"]:
+        return 1.0
+    visa = config["locations"]["switzerland"].get("visa_sponsorship", {})
+    if contains_any(job_text(job), visa.get("signals", [])):
+        return float(config.get("scoring", {}).get("visa", {}).get("sponsorship_signal", 1.0))
+    return float(config.get("scoring", {}).get("visa", {}).get("unspecified", 0.5))
+
+
+def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[str]]:
+    raw_text = job_text(job)
+    text = normalize(raw_text)
+    competencies = config.get("core_competencies", {})
+    matched_competencies = [
+        group
+        for group, phrases in competencies.items()
+        if contains_any(text, phrases)
+    ]
+    industries = config.get("target_industries", {})
+    matched_industries = [
+        name for name, phrases in industries.items() if contains_any(text, phrases)
+    ]
+    business_models = config.get("business_model_focus", {})
+    matched_models = [
+        name for name, phrases in business_models.items() if contains_any(text, phrases)
+    ]
+    direct_groups = [name for name in competencies if name != "role_scope"]
+    features = {
+        "direct_experience": sum(name in matched_competencies for name in direct_groups) / max(1, len(direct_groups)),
+        "transferable_responsibilities": float("role_scope" in matched_competencies),
+        "industry": len(matched_industries) / max(1, len(industries)),
+        "business_model": len(matched_models) / max(1, len(business_models)),
+        "workplace": workplace_fit(job, config),
+        "language": language_fit(raw_text, config),
+        "visa": visa_fit(job, config),
+    }
+    profiles = config.get("scoring", {}).get("profiles", {})
+    profile_name = config.get("scoring", {}).get("active_profile", "balanced")
+    weights = profiles.get(profile_name)
+    if not weights:
+        raise ValueError(f"Unknown scoring profile: {profile_name}")
+    total_weight = sum(float(weight) for weight in weights.values())
+    if total_weight <= 0:
+        raise ValueError("Scoring profile must have a positive total weight")
+    total = 10.0 * sum(float(weights.get(key, 0)) * value for key, value in features.items()) / total_weight
+    matched = matched_competencies + [f"industry:{item}" for item in matched_industries]
+    return round(total, 1), matched
+
+
+def filter_and_score(jobs: list[dict[str, Any]], config: dict[str, Any], history: set[str]) -> list[dict[str, Any]]:
+    negatives = [normalize(item) for item in config.get("negative_title_keywords", config.get("negative_keywords", []))]
+    max_age = int(config.get("search", {}).get("max_age_days", 30))
+    minimum = float(config.get("search", {}).get("minimum_fit_score", 0))
+    fresh: list[dict[str, Any]] = []
+    for job in jobs:
+        text = normalize(job_text(job))
+        title = normalize(str(job.get("title", "")))
+        if any(word in title for word in negatives):
+            continue
+        if not is_recent(job, max_age) or job_identifier(job) in history:
+            continue
+        if not meets_language_rule(job_text(job), config) or not meets_switzerland_sponsorship(job, config):
+            continue
+        score, matched = score_job(job, config)
+        if score < minimum:
+            continue
+        job["fit_score"] = score
+        job["matched_keywords"] = matched
+        fresh.append(job)
+    return sorted(fresh, key=lambda job: (-job["fit_score"], str(job.get("created", ""))))
+
+
+def safe_url(value: str) -> str:
+    parsed = urlparse(value)
+    return value if parsed.scheme in {"http", "https"} and parsed.netloc else "#"
+
+
+def load_cv() -> str:
+    """Load the bilingual profile used for optional AI match rationales."""
+    try:
+        return CV_PATH.read_text(encoding="utf-8")
+    except OSError as exc:
+        LOG.warning("Could not read CV profile for rationales: %s", exc)
+        return ""
+
+
+def get_ai_rationale(job: dict[str, Any], cv_text: str) -> str | None:
+    """Generate an optional, brief fit rationale when OPENAI_API_KEY is set."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not cv_text:
+        return None
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=api_key)
+        prompt = (
+            "Compare this candidate profile with the job. In two concise sentences, "
+            "explain the strongest transferable fit and one material gap or unknown. "
+            "Do not invent qualifications.\n\n"
+            f"Candidate profile:\n{cv_text[:5000]}\n\n"
+            f"Job title: {job.get('title', '')}\n"
+            f"Company: {job.get('company', {}).get('display_name', '')}\n"
+            f"Location: {job.get('location', {}).get('display_name', '')}\n"
+            f"Job description:\n{str(job.get('description', ''))[:3000]}"
+        )
+        response = client.chat.completions.create(
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=150,
+            temperature=0.3,
+        )
+        content = response.choices[0].message.content
+        return content.strip() if content else None
+    except Exception as exc:  # AI summaries are optional; search/email still work.
+        LOG.warning("Could not generate an AI rationale: %s", exc)
+        return None
+
+
+def format_email(jobs: list[dict[str, Any]]) -> tuple[str, str]:
+    paris_now = datetime.now(ZoneInfo("Europe/Paris"))
+    date_label = paris_now.strftime("%d %b %Y")
+    rows = []
+    plain_rows = []
+    for job in jobs:
+        title = str(job.get("title", "Untitled role"))
+        company = str(job.get("company", {}).get("display_name", "Company not listed"))
+        location = str(job.get("location", {}).get("display_name", "Location not listed"))
+        link = safe_url(str(job.get("redirect_url", "")))
+        score = job["fit_score"]
+        rationale = str(job.get("rationale", ""))
+        rationale_html = (
+            f"<br><span style='color:#475467'>{html.escape(rationale)}</span>"
+            if rationale
+            else ""
+        )
+        rows.append(
+            "<tr><td style='padding:12px;border-bottom:1px solid #e5e7eb'>"
+            f"<a href='{html.escape(link, quote=True)}' style='font-weight:600;color:#155eef'>"
+            f"{html.escape(title)}</a><br><span style='color:#667085'>{html.escape(company)}</span>"
+            f"{rationale_html}</td>"
+            f"<td style='padding:12px;border-bottom:1px solid #e5e7eb'>{html.escape(location)}</td>"
+            f"<td style='padding:12px;border-bottom:1px solid #e5e7eb;text-align:center'>{score}/10</td></tr>"
+        )
+        plain_rows.append(
+            f"{title} | {company} | {score}/10 | {location}\nApply: {link}"
+            + (f"\nWhy it may fit: {rationale}" if rationale else "")
+        )
+    html_body = (
+        "<html><body style='font-family:Arial,sans-serif;color:#101828;max-width:900px;margin:auto'>"
+        f"<h2>Fresh Product Marketing roles — {date_label}</h2>"
+        f"<p>Found {len(jobs)} new role(s), sorted by fit score.</p>"
+        "<table style='border-collapse:collapse;width:100%'><thead><tr>"
+        "<th align='left' style='padding:12px'>Role and company</th>"
+        "<th align='left' style='padding:12px'>Location</th>"
+        "<th style='padding:12px'>Fit</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table></body></html>"
+    )
+    plain = f"Fresh Product Marketing roles — {date_label}\nFound {len(jobs)} new role(s).\n\n" + "\n\n".join(plain_rows)
+    return plain, html_body
+
+
+def send_email(jobs: list[dict[str, Any]], recipient: str) -> None:
+    sender = os.getenv("GMAIL_ADDRESS")
+    password = os.getenv("GMAIL_APP_PASSWORD")
+    if not sender or not password:
+        raise RuntimeError("Set GMAIL_ADDRESS and GMAIL_APP_PASSWORD to send email")
+    plain, rich = format_email(jobs)
+    message = EmailMessage()
+    paris_now = datetime.now(ZoneInfo("Europe/Paris"))
+    message["Subject"] = f"{len(jobs)} fresh PMM job match(es) — {paris_now:%d %b}"
+    message["From"] = sender
+    message["To"] = recipient
+    message.set_content(plain)
+    message.add_alternative(rich, subtype="html")
+    context = ssl.create_default_context()
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context, timeout=30) as smtp:
+        smtp.login(sender, password)
+        smtp.send_message(message)
+
+
+def main() -> int:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    config = load_config()
+    recipient = os.getenv("JOB_ALERT_EMAIL") or config.get("notification_email")
+    if not recipient:
+        raise RuntimeError("Set JOB_ALERT_EMAIL or notification_email in config.yaml")
+    history = load_history()
+    jobs = search_adzuna(config)
+    matches = filter_and_score(jobs, config, history)
+    LOG.info("Fetched %d unique listings; %d fresh listings passed filters", len(jobs), len(matches))
+    if not matches:
+        LOG.info("No fresh matches to email")
+        return 0
+    if os.getenv("OPENAI_API_KEY"):
+        cv_text = load_cv()
+        for job in matches[:10]:
+            job["rationale"] = get_ai_rationale(job, cv_text)
+    send_email(matches, recipient)
+    history.update(job_identifier(job) for job in matches)
     save_history(history)
-  else:
-    print("No fresh matches to email today.")
+    LOG.info("Emailed %d fresh matches to %s", len(matches), recipient)
+    return 0
 
 
 if __name__ == "__main__":
-  main()
+    try:
+        sys.exit(main())
+    except requests.RequestException as exc:
+        LOG.error("Adzuna request failed: %s", exc)
+        sys.exit(1)
+    except (RuntimeError, ValueError, OSError) as exc:
+        LOG.error("Job hunter failed: %s", exc)
+        sys.exit(1)

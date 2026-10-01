@@ -1,46 +1,256 @@
+# Search for the work you do, even when the employer uses an adjacent title.
 target_titles:
   - Product Marketing Manager
-  - PMM
+  - Product Marketing Lead
+  - Product Marketing Specialist
   - Go-to-Market Manager
   - GTM Manager
-  - Product Marketing Lead
-  - Chef de Produit
-  - Responsable Marketing Produit
-  - Growth Manager
-  - Product Lead
-  - Marketing Manager
+  - Product Manager, Growth
+  - Growth Marketing Manager
+  - Customer Marketing Manager
+  - Market Insights Manager
+  - Customer Insights Manager
+  - Product Strategy Manager
+  - Commercial Strategy Manager
+  - Portfolio Marketing Manager
+  - Proposition Manager
+  - Regional Marketing Manager
+  - International Marketing Manager
+  - Chef de produit
+  - Chef de produit marketing
+  - Responsable marketing produit
+  - Responsable stratégie marketing
+  - Responsable marketing régional
+  - Responsable marketing international
+  - Responsable études marketing
+  - Responsable insights clients
+  - Responsable développement de l'offre
+  - Chef de marché
+
+# Adzuna searches these terms, in addition to each target title. Keep queries
+# focused enough to avoid returning large volumes of unrelated marketing work.
+search_terms:
+  - product marketing
+  - marketing produit
+  - product growth
+  - growth marketing
+  - go-to-market
+  - stratégie de mise sur le marché
+  - product strategy
+  - customer insights
+  - insights clients
+  - product proposition
+  - développement de l'offre
+  - chef de produit
+  - regional marketing
+  - marketing régional
 
 core_competencies:
-  - positioning
-  - sales enablement
-  - go-to-market
-  - gtm
-  - product messaging
-  - product launch
-  - value proposition
+  role_scope:
+    - product marketing
+    - marketing produit
+    - product strategy
+    - product growth
+    - product proposition
+    - proposition manager
+    - chef de produit
+    - customer insights
+    - market insights
+    - commercial strategy
+    - regional marketing
+    - international marketing
+    - marketing régional
+    - marketing international
+    - regional strategy
+    - stratégie régionale
+    - market localization
+    - adaptation régionale
+  positioning_and_messaging:
+    - positioning
+    - product positioning
+    - portfolio positioning
+    - positionnement
+    - positionnement produit
+    - product messaging
+    - messaging
+    - proposition de valeur
+    - value proposition
+    - value messaging
+  research_and_insights:
+    - user research
+    - customer research
+    - market research
+    - voice of customer
+    - VoC
+    - jobs-to-be-done
+    - JTBD
+    - customer insights
+    - consumer insights
+    - recherche utilisateur
+    - étude de marché
+    - voix du client
+    - insights clients
+    - besoins utilisateurs
+    - analyse win-loss
+  go_to_market_and_launch:
+    - go-to-market
+    - go to market
+    - GTM
+    - product launch
+    - offer launch
+    - launch strategy
+    - mise sur le marché
+    - lancement produit
+    - lancement d'offre
+    - stratégie de lancement
+  sales_enablement:
+    - sales enablement
+    - battlecards
+    - sales training
+    - sales kit
+    - aide à la vente
+    - activation commerciale
+    - argumentaires commerciaux
+    - outils de vente
+  growth_and_lifecycle:
+    - growth marketing
+    - customer acquisition
+    - retention
+    - lifecycle marketing
+    - campaign performance
+    - CRM campaigns
+    - croissance
+    - acquisition client
+    - fidélisation
+    - campagnes CRM
+    - campagnes marketing
+  segmentation_and_competition:
+    - segmentation
+    - customer segmentation
+    - competitive analysis
+    - competitor analysis
+    - market intelligence
+    - segmentation client
+    - analyse concurrentielle
+    - veille concurrentielle
+  agency_and_project_delivery:
+    - agency management
+    - agency briefing
+    - paid social agency
+    - paid search agency
+    - display advertising
+    - strategic brief
+    - creative brief
+    - creative direction
+    - project management
+    - campaign reporting
+    - reporting guidelines
+    - gestion d'agence
+    - brief stratégique
+    - brief créatif
+    - direction créative
+    - gestion de projet
+    - reporting de campagne
+    - suivi des performances
 
 business_model_focus:
-  - b2c
-  - b2b2c
-  - consumer
-  - direct-to-consumer
-  - d2c
-  - grand public
+  consumer_b2c:
+    - b2c
+    - consumer
+    - direct-to-consumer
+    - D2C
+    - e-commerce
+    - grand public
+    - consommateur
+  b2b2c_and_partner:
+    - b2b2c
+    - broker
+    - partner channel
+    - distribution partners
+    - courtiers
+    - partenaires de distribution
+  b2b_transferable:
+    - b2b
+    - small business
+    - SME
+    - enterprise
+    - PME
+    - professionnels
+    - commercial and industrial
+    - industrial customers
+    - clients industriels
+    - entreprises
 
 target_industries:
-  - insurance
-  - energy
-  - tech
-  - health
+  insurance:
+    - insurance
+    - health insurance
+    - travel insurance
+    - insurer
+    - assurance
+    - assurance santé
+    - assurance voyage
+    - assureur
+    - mutuelle
+  energy:
+    - energy
+    - electricity
+    - energy efficiency
+    - demand reduction
+    - energy efficiency programs
+    - energy rebates
+    - smart thermostats
+    - heat pumps
+    - efficient appliances
+    - industrial energy efficiency
+    - small business energy programs
+    - énergie
+    - électricité
+    - efficacité énergétique
+    - réduction de la demande
+    - programmes d'efficacité énergétique
+    - aides et rabais énergétiques
+    - thermostats intelligents
+    - pompes à chaleur
+    - appareils écoénergétiques
+    - efficacité énergétique industrielle
+    - programmes énergétiques pour PME
+  technology:
+    - technology
+    - software
+    - SaaS
+    - digital product
+    - consumer technology
+    - plateforme numérique
+    - logiciel
+    - produit numérique
+  health:
+    - health
+    - healthcare
+    - healthtech
+    - santé
+    - soins de santé
+    - technologie médicale
 
 locations:
   france:
     country_code: fr
+    preferred: [Chamonix, Haute-Savoie, Annecy]
+    commute_hubs: [Geneva, Genève]
     workplace_models: [hybrid, in-office, remote]
   switzerland:
     country_code: ch
     preferred: [Geneva, Genève]
     workplace_models: [hybrid, in-office]
+    visa_sponsorship:
+      required: false
+      signals:
+        - visa sponsorship
+        - work permit sponsorship
+        - sponsorship available
+        - visa support
+        - permis de travail
+        - sponsoring visa
   include_remote: true
 
 language_rules:
@@ -48,8 +258,41 @@ language_rules:
   candidate_french: professional
   accepted_posting_languages: [English, French]
   require_english_role_signal: false
+  english_role_signals:
+    - English required
+    - fluent English
+    - native English
+    - C1 English
+    - C2 English
+    - English-first
+    - working language is English
+    - English-speaking environment
+    - anglais courant
+    - anglais bilingue
+    - anglais langue maternelle
+    - anglais C1
+    - anglais C2
+    - environnement anglophone
+    - anglais professionnel
+  french_role_signals:
+    - French required
+    - fluent French
+    - français courant
+    - français professionnel
+    - français bilingue
 
-negative_keywords:
+# These exclusions are checked against the job title only. This avoids
+# rejecting good enablement or cross-functional roles because a description
+# mentions sales leaders, engineering partners, or marketing operations teams.
+negative_title_keywords:
+  - sales executive
+  - sales specialist
+  - account executive
+  - business development
+  - sdr
+  - bdr
+  - account manager
+  - sales representative
   - director
   - vp
   - chief marketing officer
@@ -68,13 +311,48 @@ notification_email: chey.jobbot@gmail.com
 search:
   results_per_query: 40
   pages: 2
+  max_queries_per_country: 18
   max_age_days: 30
-  minimum_fit_score: 3.0
+  minimum_fit_score: 4.5
 
+# Choose balanced, cv_evidence, or adjacent_discovery as active_profile.
+# Profiles are relative weights; the app normalizes every result to /10.
 scoring:
-  industry_boost: 1.0
-  competency_match_boost: 2.0
-  b2c_boost: 1.5
-  location_boost:
-    local_hub: 1.0
-    france_or_remote: 0.5
+  active_profile: adjacent_discovery
+  profiles:
+    balanced:
+      direct_experience: 3.25
+      transferable_responsibilities: 1.25
+      industry: 2.0
+      business_model: 1.0
+      workplace: 2.0
+      language: 1.0
+      visa: 0.5
+    cv_evidence:
+      direct_experience: 5.25
+      transferable_responsibilities: 0.75
+      industry: 2.0
+      business_model: 0.75
+      workplace: 1.0
+      language: 1.0
+      visa: 0.5
+    adjacent_discovery:
+      direct_experience: 2.5
+      transferable_responsibilities: 3.0
+      industry: 1.5
+      business_model: 1.0
+      workplace: 1.5
+      language: 1.0
+      visa: 0.5
+  workplace:
+    local_hybrid_or_office: 1.0
+    geneva_hybrid_or_office: 1.0
+    remote: 0.35
+    other: 0.2
+  language:
+    english_signal: 1.0
+    french_signal: 0.8
+    unspecified: 0.65
+  visa:
+    sponsorship_signal: 1.0
+    unspecified: 0.5

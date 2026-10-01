@@ -1,0 +1,8 @@
+# Local credentials and run history
+.env
+.job_history.json
+OpenAPI-key*.txt
+
+# Python bytecode
+__pycache__/
+*.py[cod]
