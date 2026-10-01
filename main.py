@@ -10,6 +10,7 @@ import re
 import smtplib
 import ssl
 import sys
+import time
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -102,6 +103,53 @@ def job_identifier(job: dict[str, Any]) -> str:
     return str(job.get("id") or job.get("redirect_url") or job.get("title", "unknown"))
 
 
+def request_adzuna_page(
+    session: requests.Session,
+    url: str,
+    params: dict[str, Any],
+    retries: int,
+    backoff_seconds: float,
+    max_retry_delay: float,
+) -> tuple[requests.Response | None, str | None, int]:
+    """Retry transient Adzuna/network errors without logging credential URLs."""
+    retryable_statuses = {429, 500, 502, 503, 504}
+    last_status: str | None = None
+    attempts = retries + 1
+    for attempt in range(attempts):
+        try:
+            response = session.get(url, params=params, timeout=REQUEST_TIMEOUT)
+        except requests.RequestException as exc:
+            last_status = type(exc).__name__
+            if attempt + 1 >= attempts:
+                return None, last_status, attempts
+            delay = min(max_retry_delay, backoff_seconds * (2**attempt))
+            LOG.warning("Adzuna network error (%s); retrying in %.1fs", last_status, delay)
+            time.sleep(delay)
+            continue
+
+        if response.ok:
+            return response, None, attempt + 1
+        status = response.status_code
+        last_status = str(status)
+        if status not in retryable_statuses:
+            raise RuntimeError(
+                f"Adzuna rejected the search request (HTTP {status}); "
+                "check API credentials, account status, and request limits."
+            )
+        if attempt + 1 >= attempts:
+            return None, last_status, attempts
+
+        retry_after = response.headers.get("Retry-After", "")
+        try:
+            delay = float(retry_after)
+        except (TypeError, ValueError):
+            delay = backoff_seconds * (2**attempt)
+        delay = min(max_retry_delay, max(0.0, delay))
+        LOG.warning("Adzuna returned HTTP %s; retrying in %.1fs", status, delay)
+        time.sleep(delay)
+    return None, last_status, attempts
+
+
 def search_adzuna(config: dict[str, Any]) -> list[dict[str, Any]]:
     app_id, app_key = os.getenv("ADZUNA_APP_ID"), os.getenv("ADZUNA_APP_KEY")
     if not app_id or not app_key:
@@ -120,9 +168,17 @@ def search_adzuna(config: dict[str, Any]) -> list[dict[str, Any]]:
     per_page = int(search_cfg.get("results_per_query", 30))
     pages = int(search_cfg.get("pages", 2))
     max_queries = int(search_cfg.get("max_queries_per_country", 18))
+    retries = int(search_cfg.get("api_retries", 3))
+    backoff_seconds = float(search_cfg.get("retry_backoff_seconds", 2))
+    max_retry_delay = float(search_cfg.get("max_retry_delay_seconds", 30))
+    max_consecutive_failures = int(search_cfg.get("max_consecutive_failed_pages", 4))
     terms = terms[:max_queries]
     found: dict[str, dict[str, Any]] = {}
     session = requests.Session()
+    successful_pages = 0
+    failed_pages = 0
+    consecutive_failures = 0
+    stop_search = False
     for place in ("france", "switzerland"):
         country = config["locations"][place]["country_code"]
         for term in sorted(terms):
@@ -134,15 +190,50 @@ def search_adzuna(config: dict[str, Any]) -> list[dict[str, Any]]:
                     "what": term,
                     "content-type": "application/json",
                 }
-                response = session.get(
+                response, error, attempts = request_adzuna_page(
+                    session,
                     ADZUNA_URL.format(country=country, page=page),
-                    params=params,
-                    timeout=REQUEST_TIMEOUT,
+                    params,
+                    retries,
+                    backoff_seconds,
+                    max_retry_delay,
                 )
-                response.raise_for_status()
+                if response is None:
+                    failed_pages += 1
+                    consecutive_failures += 1
+                    LOG.warning(
+                        "Skipping Adzuna %s page %d query '%s' after %d attempts (%s)",
+                        country,
+                        page,
+                        term,
+                        attempts,
+                        error or "temporary API error",
+                    )
+                    if consecutive_failures >= max_consecutive_failures:
+                        LOG.error("Stopping Adzuna search after repeated consecutive failures")
+                        stop_search = True
+                        break
+                    continue
+                successful_pages += 1
+                consecutive_failures = 0
                 for job in response.json().get("results", []):
                     job["_country_code"] = country
                     found.setdefault(job_identifier(job), job)
+            if stop_search:
+                break
+        if stop_search:
+            break
+    if successful_pages == 0:
+        raise RuntimeError(
+            f"Adzuna was unavailable: all {failed_pages} search pages failed after retries. "
+            "Try the workflow again later."
+        )
+    if failed_pages:
+        LOG.warning(
+            "Continuing with partial Adzuna results: %d pages succeeded and %d failed",
+            successful_pages,
+            failed_pages,
+        )
     return list(found.values())
 
 

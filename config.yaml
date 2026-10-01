@@ -312,6 +312,10 @@ search:
   results_per_query: 40
   pages: 2
   max_queries_per_country: 18
+  api_retries: 3
+  retry_backoff_seconds: 2
+  max_retry_delay_seconds: 30
+  max_consecutive_failed_pages: 4
   max_age_days: 30
   minimum_fit_score: 4.5
 

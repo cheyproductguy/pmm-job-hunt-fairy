@@ -47,5 +47,6 @@ To switch a daily run, set `scoring.active_profile` in `config.yaml`, then commi
 ## Notes
 
 - Adzuna results are subject to API availability and listing coverage in each country.
+- Temporary Adzuna errors (including HTTP 503) are retried with backoff. If a few individual pages remain unavailable, the app continues with partial results; if no pages succeed, the run exits with a clear retry-later error.
 - Job boards may omit visa and language details. Unspecified details receive a neutral score; Swiss sponsorship is not required by default.
 - GitHub scheduled runs use the latest commit on the default branch. GitHub may occasionally delay scheduled runs during heavy load.
