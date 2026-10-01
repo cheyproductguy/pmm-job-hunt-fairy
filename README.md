@@ -40,6 +40,8 @@ The app searches configured English and French queries plus title variants, so r
 
 Competencies, industries, business models, location/workplace, language signals, and sponsorship evidence are scored as separate dimensions. English and French phrase variants are accent-insensitive. English-first roles rank well, French postings remain eligible, and unspecified language requirements receive a neutral score. Geneva visa sponsorship evidence improves fit; it is not a hard filter unless `visa_sponsorship.required` is changed to `true`.
 
+Seniority screening excludes explicit 10+ year overall requirements and mandatory experience in a **pure B2B** role (with or without a numeric year count). Mixed B2B/B2C and B2B2C requirements remain eligible; preferred/desirable experience is not treated as mandatory. The daily digest is capped at the top eight matches (`search.max_email_results`), so optional AI rationales are generated only for those roles.
+
 Fit scores are normalized to 10. `scoring.active_profile` selects `balanced`, `cv_evidence`, or `adjacent_discovery`; adjust `search.minimum_fit_score` to control how selective the email is. Chamonix-area and Geneva hybrid/in-office roles rank above remote roles.
 
 To switch a daily run, set `scoring.active_profile` in `config.yaml`, then commit and push that change to the repository's default branch. The next scheduled run reads that profile. `balanced` gives a mix of demonstrated skills, domain, and location; `cv_evidence` emphasizes the competency groups you have directly used; `adjacent_discovery` emphasizes transferable responsibilities and role scope so titles can vary more.

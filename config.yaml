@@ -298,6 +298,17 @@ negative_title_keywords:
   - chief marketing officer
   - cmo
   - intern
+  - apprentice
+  - apprenticeship
+  - student
+  - working student
+  - apprenti
+  - apprentie
+  - apprentissage
+  - étudiant
+  - étudiante
+  - alternant
+  - alternante
   - alternance
   - stage
   - jeune diplome
@@ -318,6 +329,40 @@ search:
   max_consecutive_failed_pages: 4
   max_age_days: 30
   minimum_fit_score: 4.5
+  max_email_results: 8
+
+# Only explicit minimums at or above these ceilings are screened out.
+# Preferred/desirable experience is not treated as a hard requirement.
+seniority_filters:
+  screen_out_minimums_at_or_above:
+    overall_years: 10
+  exclude_explicit_pure_b2b_minimum: true
+  exclude_explicit_pure_b2b_requirement: true
+  pure_b2b_requirement_signals:
+    - must have
+    - is a must
+    - required
+    - requires
+    - mandatory
+    - essential
+    - minimum
+    - at least
+    - requis
+    - exige
+    - obligatoire
+    - indispensable
+    - au moins
+  preferred_signals:
+    - preferred
+    - desirable
+    - ideally
+    - nice to have
+    - would be a plus
+    - an advantage
+    - souhaité
+    - souhaitable
+    - apprécié
+    - un atout
 
 # Choose balanced, cv_evidence, or adjacent_discovery as active_profile.
 # Profiles are relative weights; the app normalizes every result to /10.

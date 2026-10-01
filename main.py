@@ -262,6 +262,66 @@ def is_recent(job: dict[str, Any], max_age_days: int) -> bool:
         return True
 
 
+def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str | None:
+    """Return a reason when a posting states an excluded minimum experience level."""
+    rules = config.get("seniority_filters", {})
+    caps = rules.get("screen_out_minimums_at_or_above", {})
+    normalized = normalize(text)
+    year_units = r"(?:years?|yrs?|ans?|annees?)"
+    patterns = (
+        re.compile(rf"\b(?P<years>\d{{1,2}})\s*\+\s*{year_units}\b"),
+        re.compile(
+            rf"\b(?:at least|minimum(?: of)?|must have|required|requires|au moins|minimum de|exige(?:e)?|requis(?:e)?)\s+"
+            rf"(?P<years>\d{{1,2}})\s*{year_units}\b"
+        ),
+        re.compile(
+            rf"\b(?P<years>\d{{1,2}})\s*{year_units}"
+            rf"[^.!?;\n]{{0,25}}\b(?:minimum|required|at least|au moins)\b"
+        ),
+    )
+    preferred_signals = [normalize(item) for item in rules.get("preferred_signals", [])]
+    b2b_pattern = re.compile(
+        r"(?<![a-z0-9])(?:b2b|business[- ]to[- ]business)(?![a-z0-9])"
+    )
+    mixed_b2b_pattern = re.compile(
+        r"(?<![a-z0-9])b2b2c(?![a-z0-9])|"
+        r"(?<![a-z0-9])b2b\s*(?:/|&|and|or|to)\s*b2c(?![a-z0-9])|"
+        r"(?<![a-z0-9])b2c\s*(?:/|&|and|or|to)\s*b2b(?![a-z0-9])"
+    )
+    pure_b2b_required = bool(rules.get("exclude_explicit_pure_b2b_requirement", True))
+    required_signals = [normalize(item) for item in rules.get("pure_b2b_requirement_signals", [])]
+
+    for pattern in patterns:
+        for match in pattern.finditer(normalized):
+            years = int(match.group("years"))
+            # Limit context to the same sentence so nearby unrelated benefits
+            # or qualifications do not change the meaning of the requirement.
+            left_edge = max(normalized.rfind(mark, 0, match.start()) for mark in (".", ";", "!", "?", "\n")) + 1
+            right_candidates = [normalized.find(mark, match.end()) for mark in (".", ";", "!", "?", "\n")]
+            right_candidates = [position for position in right_candidates if position >= 0]
+            right_edge = min(right_candidates) if right_candidates else len(normalized)
+            sentence = normalized[left_edge:right_edge]
+            if any(signal in sentence for signal in preferred_signals):
+                continue
+
+            is_pure_b2b = bool(b2b_pattern.search(sentence)) and not bool(mixed_b2b_pattern.search(sentence))
+            if is_pure_b2b and rules.get("exclude_explicit_pure_b2b_minimum", True):
+                return f"{years}+ years required in a pure B2B context"
+            cap = int(caps.get("overall_years", 0))
+            if cap and years >= cap:
+                return f"{years}+ years required overall (screen-out threshold: {cap})"
+
+    if pure_b2b_required:
+        for sentence in re.split(r"[.;!?\n]+", normalized):
+            if any(signal in sentence for signal in preferred_signals):
+                continue
+            if not b2b_pattern.search(sentence) or mixed_b2b_pattern.search(sentence):
+                continue
+            if any(signal in sentence for signal in required_signals):
+                return "explicit pure B2B experience requirement"
+    return None
+
+
 def meets_language_rule(text: str, config: dict[str, Any]) -> bool:
     language = config.get("language_rules", {})
     if not language.get("require_english_role_signal", True):
@@ -364,12 +424,18 @@ def filter_and_score(jobs: list[dict[str, Any]], config: dict[str, Any], history
     max_age = int(config.get("search", {}).get("max_age_days", 30))
     minimum = float(config.get("search", {}).get("minimum_fit_score", 0))
     fresh: list[dict[str, Any]] = []
+    seniority_excluded = 0
     for job in jobs:
         text = normalize(job_text(job))
         title = normalize(str(job.get("title", "")))
         if any(word in title for word in negatives):
             continue
         if not is_recent(job, max_age) or job_identifier(job) in history:
+            continue
+        seniority_reason = excessive_experience_requirement(job_text(job), config)
+        if seniority_reason:
+            seniority_excluded += 1
+            LOG.info("Excluded '%s': %s", job.get("title", "Untitled role"), seniority_reason)
             continue
         if not meets_language_rule(job_text(job), config) or not meets_switzerland_sponsorship(job, config):
             continue
@@ -379,6 +445,8 @@ def filter_and_score(jobs: list[dict[str, Any]], config: dict[str, Any], history
         job["fit_score"] = score
         job["matched_keywords"] = matched
         fresh.append(job)
+    if seniority_excluded:
+        LOG.info("Screened out %d listing(s) for explicit experience minimums", seniority_excluded)
     return sorted(fresh, key=lambda job: (-job["fit_score"], str(job.get("created", ""))))
 
 
@@ -439,7 +507,7 @@ def format_email(jobs: list[dict[str, Any]]) -> tuple[str, str]:
         location = str(job.get("location", {}).get("display_name", "Location not listed"))
         link = safe_url(str(job.get("redirect_url", "")))
         score = job["fit_score"]
-        rationale = str(job.get("rationale", ""))
+        rationale = str(job.get("rationale") or "")
         rationale_html = (
             f"<br><span style='color:#475467'>{html.escape(rationale)}</span>"
             if rationale
@@ -504,14 +572,20 @@ def main() -> int:
     if not matches:
         LOG.info("No fresh matches to email")
         return 0
+    max_email_results = max(1, int(config.get("search", {}).get("max_email_results", 8)))
+    email_jobs = matches[:max_email_results]
+    if len(matches) > max_email_results:
+        LOG.info("Limiting digest to the top %d of %d matching roles", max_email_results, len(matches))
     if os.getenv("OPENAI_API_KEY"):
         cv_text = load_cv()
-        for job in matches[:10]:
-            job["rationale"] = get_ai_rationale(job, cv_text)
-    send_email(matches, recipient)
-    history.update(job_identifier(job) for job in matches)
+        for job in email_jobs:
+            rationale = get_ai_rationale(job, cv_text)
+            if rationale:
+                job["rationale"] = rationale
+    send_email(email_jobs, recipient)
+    history.update(job_identifier(job) for job in email_jobs)
     save_history(history)
-    LOG.info("Emailed %d fresh matches to %s", len(matches), recipient)
+    LOG.info("Emailed %d fresh matches to %s", len(email_jobs), recipient)
     return 0
 
 
