@@ -407,3 +407,6 @@ scoring:
   visa:
     sponsorship_signal: 1.0
     unspecified: 0.5
+  recency_bonus:
+    within_2_days: 0.5
+    within_7_days: 0.2

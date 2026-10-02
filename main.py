@@ -269,17 +269,48 @@ def contains_any(text: str, phrases: list[str] | tuple[str, ...]) -> bool:
     return False
 
 
-def is_recent(job: dict[str, Any], max_age_days: int) -> bool:
+def posted_at(job: dict[str, Any]) -> datetime | None:
     created = job.get("created")
     if not created:
-        return True
+        return None
     try:
         parsed = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed >= datetime.now(timezone.utc) - timedelta(days=max_age_days)
+        return parsed.astimezone(timezone.utc)
     except ValueError:
+        return None
+
+
+def posting_age_days(job: dict[str, Any]) -> float | None:
+    posted = posted_at(job)
+    if posted is None:
+        return None
+    age = (datetime.now(timezone.utc) - posted).total_seconds() / 86400
+    return max(0.0, age)
+
+
+def posting_date_label(job: dict[str, Any]) -> str:
+    posted = posted_at(job)
+    if posted is None:
+        return "Date unavailable"
+    local_posted = posted.astimezone(ZoneInfo("Europe/Paris"))
+    age_days = posting_age_days(job)
+    whole_days = int(age_days or 0)
+    if whole_days == 0:
+        age_label = "today"
+    elif whole_days == 1:
+        age_label = "1 day ago"
+    else:
+        age_label = f"{whole_days} days ago"
+    return f"{local_posted:%d %b %Y} · {age_label}"
+
+
+def is_recent(job: dict[str, Any], max_age_days: int) -> bool:
+    posted = posted_at(job)
+    if posted is None:
         return True
+    return posted >= datetime.now(timezone.utc) - timedelta(days=max_age_days)
 
 
 def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str | None:
@@ -435,6 +466,14 @@ def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[
     if total_weight <= 0:
         raise ValueError("Scoring profile must have a positive total weight")
     total = 10.0 * sum(float(weights.get(key, 0)) * value for key, value in features.items()) / total_weight
+    age_days = posting_age_days(job)
+    recency_rules = config.get("scoring", {}).get("recency_bonus", {})
+    if age_days is not None:
+        if age_days <= 2:
+            total += float(recency_rules.get("within_2_days", 0.5))
+        elif age_days <= 7:
+            total += float(recency_rules.get("within_7_days", 0.2))
+    total = min(10.0, total)
     matched = matched_competencies + [f"industry:{item}" for item in matched_industries]
     return round(total, 1), matched
 
@@ -464,6 +503,7 @@ def filter_and_score(jobs: list[dict[str, Any]], config: dict[str, Any]) -> list
         job["fit_score"] = score
         job["matched_keywords"] = matched
         job["industry_label"] = industry_label(job, config)
+        job["posted_label"] = posting_date_label(job)
         matches.append(job)
     if seniority_excluded:
         LOG.info("Screened out %d listing(s) for explicit experience minimums", seniority_excluded)
@@ -532,6 +572,7 @@ def format_email(jobs: list[dict[str, Any]], user_name: str) -> tuple[str, str]:
         company = str(job.get("company", {}).get("display_name", "Company not listed"))
         location = str(job.get("location", {}).get("display_name", "Location not listed"))
         sector = str(job.get("industry_label") or "Not specified")
+        posted = str(job.get("posted_label") or "Date unavailable")
         link = safe_url(str(job.get("redirect_url", "")))
         score = job["fit_score"]
         rationale = str(job.get("rationale") or "")
@@ -547,10 +588,11 @@ def format_email(jobs: list[dict[str, Any]], user_name: str) -> tuple[str, str]:
             f"{rationale_html}</td>"
             f"<td style='padding:12px;border-bottom:1px solid #e5e7eb'>{html.escape(sector)}</td>"
             f"<td style='padding:12px;border-bottom:1px solid #e5e7eb'>{html.escape(location)}</td>"
+            f"<td style='padding:12px;border-bottom:1px solid #e5e7eb'>{html.escape(posted)}</td>"
             f"<td style='padding:12px;border-bottom:1px solid #e5e7eb;text-align:center'>{score}/10</td></tr>"
         )
         plain_rows.append(
-            f"{title} | {company} | {sector} | {score}/10 | {location}\nApply: {link}"
+            f"{title} | {company} | {sector} | {score}/10 | {location} | Posted {posted}\nApply: {link}"
             + (f"\nWhy it may fit: {rationale}" if rationale else "")
         )
     html_body = (
@@ -564,6 +606,7 @@ def format_email(jobs: list[dict[str, Any]], user_name: str) -> tuple[str, str]:
         "<th align='left' style='padding:12px'>Role and company</th>"
         "<th align='left' style='padding:12px'>Industry / category</th>"
         "<th align='left' style='padding:12px'>Location</th>"
+        "<th align='left' style='padding:12px'>Posted</th>"
         "<th style='padding:12px'>Fit</th></tr></thead><tbody>"
         + "".join(rows)
         + "</tbody></table></body></html>"
