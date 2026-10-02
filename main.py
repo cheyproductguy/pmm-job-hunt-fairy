@@ -516,9 +516,15 @@ def get_ai_rationale(job: dict[str, Any], cv_text: str) -> str | None:
         return None
 
 
-def format_email(jobs: list[dict[str, Any]]) -> tuple[str, str]:
+def format_email(jobs: list[dict[str, Any]], user_name: str) -> tuple[str, str]:
     paris_now = datetime.now(ZoneInfo("Europe/Paris"))
     date_label = paris_now.strftime("%d %b %Y")
+    first_name = user_name.strip().split()[0] if user_name.strip() else "Friend"
+    preview_text = "Job matches based on your PMM magic✨"
+    encouragement = (
+        f"Good morning {user_name.strip() or first_name}, your dream job is waiting for you "
+        "in the list below. Keep putting in the work!"
+    )
     rows = []
     plain_rows = []
     for job in jobs:
@@ -549,8 +555,11 @@ def format_email(jobs: list[dict[str, Any]]) -> tuple[str, str]:
         )
     html_body = (
         "<html><body style='font-family:Arial,sans-serif;color:#101828;max-width:900px;margin:auto'>"
-        f"<h2>Top Product Marketing job matches — {date_label}</h2>"
-        f"<p>Top {len(jobs)} eligible role(s), sorted by fit score.</p>"
+        f"<div style='display:none;max-height:0;overflow:hidden;opacity:0;color:transparent'>{html.escape(preview_text)}</div>"
+        f"<h2>{html.escape(first_name)} Daily PMM Radar</h2>"
+        f"<p>{html.escape(date_label)}</p>"
+        f"<p>{html.escape(encouragement)}</p>"
+        f"<p>Your top {len(jobs)} eligible role(s), sorted by fit score:</p>"
         "<table style='border-collapse:collapse;width:100%'><thead><tr>"
         "<th align='left' style='padding:12px'>Role and company</th>"
         "<th align='left' style='padding:12px'>Industry / category</th>"
@@ -559,19 +568,23 @@ def format_email(jobs: list[dict[str, Any]]) -> tuple[str, str]:
         + "".join(rows)
         + "</tbody></table></body></html>"
     )
-    plain = f"Top Product Marketing job matches — {date_label}\nTop {len(jobs)} eligible role(s), sorted by fit score.\n\n" + "\n\n".join(plain_rows)
+    plain = (
+        f"{preview_text}\n\n{first_name} Daily PMM Radar — {date_label}\n\n"
+        f"{encouragement}\n\nYour top {len(jobs)} eligible role(s), sorted by fit score:\n\n"
+        + "\n\n".join(plain_rows)
+    )
     return plain, html_body
 
 
-def send_email(jobs: list[dict[str, Any]], recipient: str) -> None:
+def send_email(jobs: list[dict[str, Any]], recipient: str, user_name: str) -> None:
     sender = os.getenv("GMAIL_ADDRESS")
     password = os.getenv("GMAIL_APP_PASSWORD")
     if not sender or not password:
         raise RuntimeError("Set GMAIL_ADDRESS and GMAIL_APP_PASSWORD to send email")
-    plain, rich = format_email(jobs)
+    plain, rich = format_email(jobs, user_name)
     message = EmailMessage()
-    paris_now = datetime.now(ZoneInfo("Europe/Paris"))
-    message["Subject"] = f"Top {len(jobs)} PMM job matches — {paris_now:%d %b}"
+    date_label = datetime.now(ZoneInfo("Europe/Paris")).strftime("%d %b %Y")
+    message["Subject"] = f"🚀 Daily PMM Radar | {date_label}"
     message["From"] = sender
     message["To"] = recipient
     message.set_content(plain)
@@ -588,6 +601,7 @@ def main() -> int:
     recipient = os.getenv("JOB_ALERT_EMAIL") or config.get("notification_email")
     if not recipient:
         raise RuntimeError("Set JOB_ALERT_EMAIL or notification_email in config.yaml")
+    user_name = os.getenv("JOB_ALERT_NAME") or str(config.get("user_name", "Cheyguy"))
     jobs = search_adzuna(config)
     matches = filter_and_score(jobs, config)
     LOG.info("Fetched %d unique listings; %d listings passed filters", len(jobs), len(matches))
@@ -604,7 +618,7 @@ def main() -> int:
             rationale = get_ai_rationale(job, cv_text)
             if rationale:
                 job["rationale"] = rationale
-    send_email(email_jobs, recipient)
+    send_email(email_jobs, recipient, user_name)
     LOG.info("Emailed the top %d matches to %s", len(email_jobs), recipient)
     return 0
 

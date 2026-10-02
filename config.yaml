@@ -318,6 +318,7 @@ negative_title_keywords:
   - marketing operations
 
 notification_email: chey.jobbot@gmail.com
+user_name: Cheyguy
 
 search:
   results_per_query: 40
@@ -328,9 +329,9 @@ search:
   max_retry_delay_seconds: 30
   max_consecutive_failed_pages: 4
   max_age_days: 30
-  # Keep adjacent and transferable matches in the digest; the email remains capped at 8.
+  # Keep adjacent and transferable matches in the digest; the email remains capped at 10.
   minimum_fit_score: 3.0
-  max_email_results: 8
+  max_email_results: 10
 
 # Only explicit minimums at or above these ceilings are screened out.
 # Preferred/desirable experience is not treated as a hard requirement.
