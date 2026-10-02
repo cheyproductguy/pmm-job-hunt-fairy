@@ -30,7 +30,7 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Initialize emailed-role history
-        run: python -c "import json; from pathlib import Path; p = Path('.job_history.json'); p.write_text(json.dumps({'sent_ids': []}), encoding='utf-8') if not p.exists() else None"
+        run: python -c "from pathlib import Path; p = Path('.job_history.json'); p.write_text('[]', encoding='utf-8') if not p.exists() else None"
 
       - name: Search, score, and email top matches
         env:
