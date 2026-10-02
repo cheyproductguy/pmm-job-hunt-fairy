@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import json
 import logging
 import os
 import re
@@ -25,6 +26,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config.yaml"
 CV_PATH = ROOT / "cv.txt"
+HISTORY_PATH = Path(os.getenv("JOB_HISTORY_PATH", ROOT / ".job_history.json"))
 ADZUNA_URL = "https://api.adzuna.com/v1/api/jobs/{country}/search/{page}"
 LOG = logging.getLogger("pmm_job_hunter")
 REQUEST_TIMEOUT = 25
@@ -60,6 +62,29 @@ def load_config() -> dict[str, Any]:
     ):
         raise ValueError("config.yaml must define target_titles and title-exclusion keywords")
     return config
+
+
+def load_history() -> set[str]:
+    try:
+        with HISTORY_PATH.open("r", encoding="utf-8") as stream:
+            data = json.load(stream)
+        if isinstance(data, list):
+            return {str(item) for item in data}
+        if isinstance(data, dict):
+            return {str(item) for item in data.get("sent_ids", [])}
+        return set()
+    except FileNotFoundError:
+        return set()
+    except (json.JSONDecodeError, OSError) as exc:
+        LOG.warning("Could not read sent-job history (%s); starting empty", exc)
+        return set()
+
+
+def save_history(sent_ids: set[str]) -> None:
+    HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = HISTORY_PATH.with_suffix(".tmp")
+    temporary.write_text(json.dumps({"sent_ids": sorted(sent_ids)}, indent=2), encoding="utf-8")
+    temporary.replace(HISTORY_PATH)
 
 
 def job_text(job: dict[str, Any]) -> str:
@@ -478,7 +503,9 @@ def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[
     return round(total, 1), matched
 
 
-def filter_and_score(jobs: list[dict[str, Any]], config: dict[str, Any]) -> list[dict[str, Any]]:
+def filter_and_score(
+    jobs: list[dict[str, Any]], config: dict[str, Any], history: set[str]
+) -> list[dict[str, Any]]:
     negatives = [normalize(item) for item in config.get("negative_title_keywords", config.get("negative_keywords", []))]
     max_age = int(config.get("search", {}).get("max_age_days", 30))
     minimum = float(config.get("search", {}).get("minimum_fit_score", 0))
@@ -488,7 +515,11 @@ def filter_and_score(jobs: list[dict[str, Any]], config: dict[str, Any]) -> list
         title = normalize(str(job.get("title", "")))
         if any(word in title for word in negatives):
             continue
-        if not is_recent(job, max_age):
+        if (
+            not is_recent(job, max_age)
+            or canonical_job_key(job) in history
+            or job_identifier(job) in history
+        ):
             continue
         seniority_reason = excessive_experience_requirement(job_text(job), config)
         if seniority_reason:
@@ -562,8 +593,9 @@ def format_email(jobs: list[dict[str, Any]], user_name: str) -> tuple[str, str]:
     first_name = user_name.strip().split()[0] if user_name.strip() else "Friend"
     preview_text = "Job matches based on your PMM magic✨"
     encouragement = (
-        f"Good morning {user_name.strip() or first_name}, your dream job is waiting for you "
-        "in the list below. Keep putting in the work!"
+        f"Good morning, {user_name.strip() or first_name}! Your PMM Job Hunt Fairy has been "
+        "scouting beyond the usual titles for roles that fit your experience and career-quest "
+        "criteria. Here are today's best matches—may one lead to your next great adventure."
     )
     rows = []
     plain_rows = []
@@ -598,7 +630,7 @@ def format_email(jobs: list[dict[str, Any]], user_name: str) -> tuple[str, str]:
     html_body = (
         "<html><body style='font-family:Arial,sans-serif;color:#101828;max-width:900px;margin:auto'>"
         f"<div style='display:none;max-height:0;overflow:hidden;opacity:0;color:transparent'>{html.escape(preview_text)}</div>"
-        f"<h2>{html.escape(first_name)} Daily PMM Radar</h2>"
+        f"<h2>{html.escape(first_name)}’s PMM Job Hunt Fairy 🧚</h2>"
         f"<p>{html.escape(date_label)}</p>"
         f"<p>{html.escape(encouragement)}</p>"
         f"<p>Your top {len(jobs)} eligible role(s), sorted by fit score:</p>"
@@ -612,7 +644,7 @@ def format_email(jobs: list[dict[str, Any]], user_name: str) -> tuple[str, str]:
         + "</tbody></table></body></html>"
     )
     plain = (
-        f"{preview_text}\n\n{first_name} Daily PMM Radar — {date_label}\n\n"
+        f"{preview_text}\n\n{first_name}'s PMM Job Hunt Fairy — {date_label}\n\n"
         f"{encouragement}\n\nYour top {len(jobs)} eligible role(s), sorted by fit score:\n\n"
         + "\n\n".join(plain_rows)
     )
@@ -627,7 +659,7 @@ def send_email(jobs: list[dict[str, Any]], recipient: str, user_name: str) -> No
     plain, rich = format_email(jobs, user_name)
     message = EmailMessage()
     date_label = datetime.now(ZoneInfo("Europe/Paris")).strftime("%d %b %Y")
-    message["Subject"] = f"🚀 Daily PMM Radar | {date_label}"
+    message["Subject"] = f"🧚 PMM Job Hunt Fairy | {date_label}"
     message["From"] = sender
     message["To"] = recipient
     message.set_content(plain)
@@ -645,9 +677,10 @@ def main() -> int:
     if not recipient:
         raise RuntimeError("Set JOB_ALERT_EMAIL or notification_email in config.yaml")
     user_name = os.getenv("JOB_ALERT_NAME") or str(config.get("user_name", "Cheyguy"))
+    history = load_history()
     jobs = search_adzuna(config)
-    matches = filter_and_score(jobs, config)
-    LOG.info("Fetched %d unique listings; %d listings passed filters", len(jobs), len(matches))
+    matches = filter_and_score(jobs, config, history)
+    LOG.info("Fetched %d unique listings; %d unseen listings passed filters", len(jobs), len(matches))
     if not matches:
         LOG.info("No listings passed the configured filters")
         return 0
@@ -662,6 +695,9 @@ def main() -> int:
             if rationale:
                 job["rationale"] = rationale
     send_email(email_jobs, recipient, user_name)
+    history.update(canonical_job_key(job) for job in email_jobs)
+    history.update(job_identifier(job) for job in email_jobs)
+    save_history(history)
     LOG.info("Emailed the top %d matches to %s", len(email_jobs), recipient)
     return 0
 
