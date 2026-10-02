@@ -345,6 +345,12 @@ def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str |
     normalized = normalize(text)
     year_units = r"(?:years?|yrs?|ans?|annees?)"
     patterns = (
+        # French and English ranges such as "5 à 10 ans", "5-10 years",
+        # "between 5 and 10 years", and "entre 5 et 10 ans".
+        re.compile(
+            rf"\b(?:between\s+|entre\s+)?(?P<years>\d{{1,2}})\s*"
+            rf"(?:a|to|and|et|[-–—])\s*(?P<upper>\d{{1,2}})\s*{year_units}\b"
+        ),
         re.compile(rf"\b(?P<years>\d{{1,2}})\s*\+\s*{year_units}\b"),
         re.compile(
             rf"\b(?:at least|minimum(?: of)?|must have|required|requires|au moins|minimum de|exige(?:e)?|requis(?:e)?)\s+"
@@ -356,13 +362,16 @@ def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str |
         ),
     )
     preferred_signals = [normalize(item) for item in rules.get("preferred_signals", [])]
+    b2b_term = r"(?:b\s*(?:2|to)\s*b|business[- ]to[- ]business)"
+    b2c_term = r"b\s*(?:2|to)\s*c"
+    b2b2c_term = r"b\s*(?:2|to)\s*b\s*(?:2|to)\s*c"
     b2b_pattern = re.compile(
-        r"(?<![a-z0-9])(?:b2b|business[- ]to[- ]business)(?![a-z0-9])"
+        rf"(?<![a-z0-9]){b2b_term}(?![a-z0-9])"
     )
     mixed_b2b_pattern = re.compile(
-        r"(?<![a-z0-9])b2b2c(?![a-z0-9])|"
-        r"(?<![a-z0-9])b2b\s*(?:/|&|and|or|to)\s*b2c(?![a-z0-9])|"
-        r"(?<![a-z0-9])b2c\s*(?:/|&|and|or|to)\s*b2b(?![a-z0-9])"
+        rf"(?<![a-z0-9]){b2b2c_term}(?![a-z0-9])|"
+        rf"(?<![a-z0-9]){b2b_term}\s*(?:/|&|and|or|to|,)\s*{b2c_term}(?![a-z0-9])|"
+        rf"(?<![a-z0-9]){b2c_term}\s*(?:/|&|and|or|to|,)\s*{b2b_term}(?![a-z0-9])"
     )
     pure_b2b_required = bool(rules.get("exclude_explicit_pure_b2b_requirement", True))
     required_signals = [normalize(item) for item in rules.get("pure_b2b_requirement_signals", [])]
@@ -380,9 +389,13 @@ def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str |
             if any(signal in sentence for signal in preferred_signals):
                 continue
 
+            # A stated experience range tied to pure B2B is itself an explicit
+            # experience requirement, even if the posting omits "required".
             is_pure_b2b = bool(b2b_pattern.search(sentence)) and not bool(mixed_b2b_pattern.search(sentence))
             if is_pure_b2b and rules.get("exclude_explicit_pure_b2b_minimum", True):
-                return f"{years}+ years required in a pure B2B context"
+                upper = match.groupdict().get("upper")
+                experience = f"{years}–{upper} years" if upper else f"{years}+ years"
+                return f"{experience} stated in a pure B2B context"
             cap = int(caps.get("overall_years", 0))
             if cap and years >= cap:
                 return f"{years}+ years required overall (screen-out threshold: {cap})"

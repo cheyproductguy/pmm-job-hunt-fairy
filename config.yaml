@@ -333,7 +333,8 @@ search:
   minimum_fit_score: 3.0
   max_email_results: 10
 
-# Only explicit minimums at or above these ceilings are screened out.
+# Screen out high overall experience minimums and explicit pure-B2B experience
+# requirements (including ranges such as "5 à 10 ans" / "5-10 years").
 # Preferred/desirable experience is not treated as a hard requirement.
 seniority_filters:
   screen_out_minimums_at_or_above:
