@@ -80,6 +80,42 @@ def job_identifier(job: dict[str, Any]) -> str:
     return str(job.get("id") or job.get("redirect_url") or job.get("title", "unknown"))
 
 
+def canonical_job_key(job: dict[str, Any]) -> str:
+    """Collapse duplicate copies of one posting returned by different search queries."""
+    company = job.get("company", {})
+    location = job.get("location", {})
+    company_name = company.get("display_name", "") if isinstance(company, dict) else company
+    location_name = location.get("display_name", "") if isinstance(location, dict) else location
+
+    def compact(value: Any) -> str:
+        return re.sub(r"[^a-z0-9]+", " ", normalize(str(value))).strip()
+
+    parts = [
+        str(job.get("_country_code", "")),
+        compact(job.get("title", "")),
+        compact(company_name),
+        compact(location_name),
+    ]
+    if not parts[1] or not parts[2]:
+        return job_identifier(job)
+    return "|".join(parts)
+
+
+def industry_label(job: dict[str, Any], config: dict[str, Any]) -> str:
+    """Use a matched target sector, then fall back to Adzuna's job category."""
+    industries = config.get("target_industries", {})
+    matched = [name.replace("_", " ").title() for name, phrases in industries.items() if contains_any(job_text(job), phrases)]
+    if matched:
+        return ", ".join(matched)
+
+    category = job.get("category", {})
+    if isinstance(category, dict):
+        label = category.get("label") or category.get("tag")
+    else:
+        label = category
+    return str(label or "Not specified")
+
+
 def request_adzuna_page(
     session: requests.Session,
     url: str,
@@ -151,6 +187,7 @@ def search_adzuna(config: dict[str, Any]) -> list[dict[str, Any]]:
     max_consecutive_failures = int(search_cfg.get("max_consecutive_failed_pages", 4))
     terms = terms[:max_queries]
     found: dict[str, dict[str, Any]] = {}
+    duplicates_collapsed = 0
     session = requests.Session()
     successful_pages = 0
     failed_pages = 0
@@ -195,7 +232,11 @@ def search_adzuna(config: dict[str, Any]) -> list[dict[str, Any]]:
                 consecutive_failures = 0
                 for job in response.json().get("results", []):
                     job["_country_code"] = country
-                    found.setdefault(job_identifier(job), job)
+                    key = canonical_job_key(job)
+                    if key in found:
+                        duplicates_collapsed += 1
+                    else:
+                        found[key] = job
             if stop_search:
                 break
         if stop_search:
@@ -211,6 +252,8 @@ def search_adzuna(config: dict[str, Any]) -> list[dict[str, Any]]:
             successful_pages,
             failed_pages,
         )
+    if duplicates_collapsed:
+        LOG.info("Collapsed %d duplicate listing copies", duplicates_collapsed)
     return list(found.values())
 
 
@@ -420,6 +463,7 @@ def filter_and_score(jobs: list[dict[str, Any]], config: dict[str, Any]) -> list
             continue
         job["fit_score"] = score
         job["matched_keywords"] = matched
+        job["industry_label"] = industry_label(job, config)
         matches.append(job)
     if seniority_excluded:
         LOG.info("Screened out %d listing(s) for explicit experience minimums", seniority_excluded)
@@ -481,6 +525,7 @@ def format_email(jobs: list[dict[str, Any]]) -> tuple[str, str]:
         title = str(job.get("title", "Untitled role"))
         company = str(job.get("company", {}).get("display_name", "Company not listed"))
         location = str(job.get("location", {}).get("display_name", "Location not listed"))
+        sector = str(job.get("industry_label") or "Not specified")
         link = safe_url(str(job.get("redirect_url", "")))
         score = job["fit_score"]
         rationale = str(job.get("rationale") or "")
@@ -494,11 +539,12 @@ def format_email(jobs: list[dict[str, Any]]) -> tuple[str, str]:
             f"<a href='{html.escape(link, quote=True)}' style='font-weight:600;color:#155eef'>"
             f"{html.escape(title)}</a><br><span style='color:#667085'>{html.escape(company)}</span>"
             f"{rationale_html}</td>"
+            f"<td style='padding:12px;border-bottom:1px solid #e5e7eb'>{html.escape(sector)}</td>"
             f"<td style='padding:12px;border-bottom:1px solid #e5e7eb'>{html.escape(location)}</td>"
             f"<td style='padding:12px;border-bottom:1px solid #e5e7eb;text-align:center'>{score}/10</td></tr>"
         )
         plain_rows.append(
-            f"{title} | {company} | {score}/10 | {location}\nApply: {link}"
+            f"{title} | {company} | {sector} | {score}/10 | {location}\nApply: {link}"
             + (f"\nWhy it may fit: {rationale}" if rationale else "")
         )
     html_body = (
@@ -507,6 +553,7 @@ def format_email(jobs: list[dict[str, Any]]) -> tuple[str, str]:
         f"<p>Top {len(jobs)} eligible role(s), sorted by fit score.</p>"
         "<table style='border-collapse:collapse;width:100%'><thead><tr>"
         "<th align='left' style='padding:12px'>Role and company</th>"
+        "<th align='left' style='padding:12px'>Industry / category</th>"
         "<th align='left' style='padding:12px'>Location</th>"
         "<th style='padding:12px'>Fit</th></tr></thead><tbody>"
         + "".join(rows)

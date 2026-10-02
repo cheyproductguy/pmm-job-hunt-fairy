@@ -2,7 +2,8 @@ name: Daily PMM Job Hunter
 
 on:
   schedule:
-    - cron: '0 7 * * *'
+    # Avoid the start of the hour, when GitHub says scheduled jobs are more likely to be delayed or dropped.
+    - cron: '15 7 * * *'
       timezone: Europe/Paris
   workflow_dispatch:
 

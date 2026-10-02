@@ -8,7 +8,7 @@ Eligible listings are scored against a configurable experience profile, and the 
 
 When `OPENAI_API_KEY` is configured, the digest can also include a short, evidence-based fit rationale for the top-scoring roles in the email. This is optional; searching and email delivery do not depend on it.
 
-GitHub Actions can run the search daily at 7:00 AM Paris time. The application uses Adzuna for job listings and Gmail SMTP for the digest.
+GitHub Actions runs the search daily at 7:15 AM Paris time. The 15-minute offset avoids the top-of-hour window when GitHub reports scheduled jobs are more likely to be delayed or dropped. The application uses Adzuna for job listings and Gmail SMTP for the digest.
 
 ## Setup
 
@@ -36,9 +36,9 @@ Edit `config.yaml` to adjust titles, locations, thresholds, and scoring. `cv.txt
 
 ## Scoring and filters
 
-The app searches configured English and French queries plus title variants, so roles such as product strategy, customer insights, growth, proposition, offer, and regional marketing can surface even when they are not called PMM. Competency matching includes region-specific market strategy, energy efficiency and demand reduction programs, paid media agency coordination, project management, creative briefs/direction, and campaign reporting. It checks negative keywords against the **job title only**, avoiding false exclusions when descriptions mention sales or engineering partners.
+The app searches configured English and French queries plus title variants, so roles such as product strategy, customer insights, growth, proposition, offer, and regional marketing can surface even when they are not called PMM. Duplicate copies with the same normalized title, company, location, and country are collapsed even when Adzuna returns different listing IDs. Competency matching includes region-specific market strategy, energy efficiency and demand reduction programs, paid media agency coordination, project management, creative briefs/direction, and campaign reporting. It checks negative keywords against the **job title only**, avoiding false exclusions when descriptions mention sales or engineering partners.
 
-Competencies, industries, business models, location/workplace, language signals, and sponsorship evidence are scored as separate dimensions. English and French phrase variants are accent-insensitive. English-first roles rank well, French postings remain eligible, and unspecified language requirements receive a neutral score. Geneva visa sponsorship evidence improves fit; it is not a hard filter unless `visa_sponsorship.required` is changed to `true`.
+Competencies, industries, business models, location/workplace, language signals, and sponsorship evidence are scored as separate dimensions. The digest shows a matched target industry when one is evident in the listing, with Adzuna's category as a fallback. English and French phrase variants are accent-insensitive. English-first roles rank well, French postings remain eligible, and unspecified language requirements receive a neutral score. Geneva visa sponsorship evidence improves fit; it is not a hard filter unless `visa_sponsorship.required` is changed to `true`.
 
 Seniority screening excludes explicit 10+ year overall requirements and mandatory experience in a **pure B2B** role (with or without a numeric year count). Mixed B2B/B2C and B2B2C requirements remain eligible; preferred/desirable experience is not treated as mandatory. The daily digest is capped at the top eight matches (`search.max_email_results`), so optional AI rationales are generated only for those roles. The same listing may be emailed again on later days if it still appears in Adzuna and passes the filters. Listings older than `search.max_age_days` are excluded.
 
