@@ -2,7 +2,7 @@
 
 ## About
 
-PMM Job Hunter is a daily job-finding assistant for Cheyenne's search across product marketing and adjacent roles. It looks for work in France and Geneva that uses strengths in go-to-market strategy, customer research, positioning, growth, energy efficiency, insurance, and regional marketing—even when the job title does not say “Product Marketing Manager.”
+PMM Job Hunter is a daily job-finding assistant for product marketing and adjacent roles. Customize its profile and locations to match your experience—even when a role title does not say “Product Marketing Manager.”
 
 Eligible listings are scored against a configurable experience profile, and the top ten are emailed as a sorted digest each day. Listings can appear in more than one daily digest while they remain in Adzuna's results and meet the criteria. The active `adjacent_discovery` profile gives transferable responsibilities and role scope more weight, making it easier to spot relevant opportunities under unfamiliar titles. Remote roles are included but rank below suitable Chamonix-area and Geneva hybrid or office roles.
 
@@ -20,6 +20,7 @@ GitHub Actions runs the search daily at 7:15 AM Paris time. The 15-minute offset
    - `GMAIL_ADDRESS` (the sending Gmail address)
    - `GMAIL_APP_PASSWORD`
    - `JOB_ALERT_EMAIL` (optional; defaults to `notification_email` in `config.yaml`)
+   - `JOB_ALERT_NAME` (optional; overrides `user_name` in `config.yaml` for the personalized greeting)
    - `OPENAI_API_KEY` (optional; enables short role-fit rationales)
 4. Enable GitHub Actions and ensure this workflow is on the repository's default branch.
 5. Run **Daily PMM Job Hunter** manually once from the Actions tab to confirm the secrets and APIs are configured.
@@ -30,9 +31,9 @@ Install and run locally with Python 3.10+:
 python -m pip install -r requirements.txt
 ```
 
-Set the five environment variables above, then run `python main.py`. Adzuna credentials are required for searching. Gmail credentials are required when qualifying listings are found.
+Set the required environment variables above, then run `python main.py`. Adzuna credentials are required for searching. Gmail credentials are required when qualifying listings are found.
 
-Edit `config.yaml` to adjust titles, locations, thresholds, and scoring. `cv.txt` is the matching profile and can be tailored as the CV changes.
+Edit `config.yaml` to adjust titles, locations, thresholds, scoring, and `user_name` (the name shown in the email header and greeting). For GitHub Actions, set the optional `JOB_ALERT_NAME` secret to override that value. `cv.txt` is the matching profile and can be tailored as the CV changes.
 
 ## Scoring and filters
 
