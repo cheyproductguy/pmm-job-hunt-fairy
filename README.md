@@ -1,6 +1,6 @@
 # The PMM Job Hunt Fairy 🧚
 
-Tired of trekking daily across **6+ job boards + 6+ job alerts**? Limited job board filters and mismatched listings can leave your next great PMM role hiding in plain sight.
+Tired of trekking daily across **dozens of job boards and email alerts**? Limited job board filters and mismatched listing titles can leave your next great PMM role hiding in plain sight.
 
 **Send your PMM Job Hunt Fairy to find up to 10 roles matched to your PMM magic and career quest each morning.**
 
