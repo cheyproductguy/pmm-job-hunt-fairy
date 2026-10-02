@@ -32,18 +32,19 @@ target_titles:
 search_terms:
   - product marketing
   - marketing produit
-  - product growth
   - growth marketing
+  - lifecycle marketing
+  - marketing du cycle de vie
   - go-to-market
-  - stratégie de mise sur le marché
-  - product strategy
-  - customer insights
-  - insights clients
-  - product proposition
-  - développement de l'offre
-  - chef de produit
-  - regional marketing
-  - marketing régional
+
+business_model_search_terms:
+  - B2C marketing
+  - D2C marketing
+  - consumer product marketing
+  - consumer growth marketing
+  - marketing grand public
+  - B2B2C product marketing
+  - partner marketing
 
 core_competencies:
   role_scope:
@@ -114,12 +115,28 @@ core_competencies:
     - outils de vente
   growth_and_lifecycle:
     - growth marketing
+    - growth campaigns
+    - growth initiatives
     - customer acquisition
     - retention
     - lifecycle marketing
+    - lifecycle campaigns
+    - customer lifecycle
+    - customer lifecycle campaigns
+    - customer retention campaigns
+    - user activation
+    - customer engagement campaigns
     - campaign performance
     - CRM campaigns
     - croissance
+    - marketing de croissance
+    - campagnes de croissance
+    - marketing du cycle de vie
+    - campagnes du cycle de vie
+    - campagnes de fidélisation
+    - rétention client
+    - activation utilisateur
+    - campagnes d'engagement client
     - acquisition client
     - fidélisation
     - campagnes CRM
@@ -156,19 +173,44 @@ core_competencies:
 business_model_focus:
   consumer_b2c:
     - b2c
+    - d2c
+    - dtc
     - consumer
+    - consumer-facing
+    - consumer products
+    - consumer marketing
     - direct-to-consumer
+    - direct to consumer
     - D2C
     - e-commerce
+    - retail products
+    - retail marketing
+    - retail customers
+    - end users
+    - households
+    - residential customers
     - grand public
     - consommateur
+    - particuliers
+    - clientèle de particuliers
+    - ménages
+    - produits résidentiels
+    - vente aux particuliers
   b2b2c_and_partner:
     - b2b2c
     - broker
+    - broker channel
     - partner channel
+    - partner marketing
+    - channel marketing
+    - partner-led
     - distribution partners
+    - affinity partners
+    - utility partners
     - courtiers
+    - marketing partenaires
     - partenaires de distribution
+    - réseau de distribution
   b2b_transferable:
     - b2b
     - small business
@@ -324,6 +366,9 @@ search:
   results_per_query: 40
   pages: 2
   max_queries_per_country: 18
+  # Rebalance a fixed query budget toward the consumer/partner domains of focus.
+  core_query_slots: 6
+  business_model_query_slots: 7
   api_retries: 3
   retry_backoff_seconds: 2
   max_retry_delay_seconds: 30
@@ -376,7 +421,7 @@ scoring:
       direct_experience: 3.25
       transferable_responsibilities: 1.25
       industry: 2.0
-      business_model: 1.0
+      business_model: 1.75
       workplace: 2.0
       language: 1.0
       visa: 0.5
@@ -384,7 +429,7 @@ scoring:
       direct_experience: 5.25
       transferable_responsibilities: 0.75
       industry: 2.0
-      business_model: 0.75
+      business_model: 1.25
       workplace: 1.0
       language: 1.0
       visa: 0.5
@@ -392,7 +437,7 @@ scoring:
       direct_experience: 2.5
       transferable_responsibilities: 3.0
       industry: 1.5
-      business_model: 1.0
+      business_model: 2.25
       workplace: 1.5
       language: 1.0
       visa: 0.5
@@ -411,3 +456,8 @@ scoring:
   recency_bonus:
     within_2_days: 0.5
     within_7_days: 0.2
+  business_model_fit:
+    consumer_b2c: 1.0
+    b2b2c_and_partner: 0.9
+    b2b_transferable: 0.3
+    unspecified: 0.45

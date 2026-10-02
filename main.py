@@ -30,7 +30,7 @@ HISTORY_PATH = Path(os.getenv("JOB_HISTORY_PATH", ROOT / ".job_history.json"))
 ADZUNA_URL = "https://api.adzuna.com/v1/api/jobs/{country}/search/{page}"
 LOG = logging.getLogger("pmm_job_hunter")
 REQUEST_TIMEOUT = 25
-ACRONYM_SIGNALS = {"b2b", "b2c", "b2b2c", "d2c", "sme", "pme", "voc", "jtbd", "sdr", "bdr"}
+ACRONYM_SIGNALS = {"b2b", "b2c", "b2b2c", "d2c", "dtc", "sme", "pme", "voc", "jtbd", "sdr", "bdr"}
 
 TITLE_SEARCH_TERMS = {
     "Product Marketing Manager": ("Product Marketing Manager", "Responsable marketing produit"),
@@ -52,6 +52,41 @@ def normalize(text: str) -> str:
     """Lowercase text and remove accents for bilingual substring matching."""
     decomposed = unicodedata.normalize("NFKD", text.lower())
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+
+
+def unique_terms(terms: list[str]) -> list[str]:
+    """Preserve term order while deduplicating case- and accent-insensitively."""
+    unique: list[str] = []
+    seen: set[str] = set()
+    for term in terms:
+        value = str(term).strip()
+        key = normalize(value)
+        if key and key not in seen:
+            unique.append(value)
+            seen.add(key)
+    return unique
+
+
+def spread_title_terms(groups: list[list[str]], limit: int) -> list[str]:
+    """Select title variants across the full target list, then add extra aliases."""
+    groups = [unique_terms(group) for group in groups if group]
+    if limit <= 0 or not groups:
+        return []
+    selected: list[str] = []
+    if len(groups) > limit:
+        indexes = sorted({round(i * (len(groups) - 1) / max(1, limit - 1)) for i in range(limit)})
+        selected.extend(groups[index][0] for index in indexes if groups[index])
+    else:
+        for variant in range(max(map(len, groups))):
+            for group in groups:
+                if variant < len(group) and len(selected) < limit:
+                    selected.append(group[variant])
+    if len(selected) < limit:
+        for group in groups:
+            for term in group:
+                if term not in selected and len(selected) < limit:
+                    selected.append(term)
+    return selected[:limit]
 
 
 def load_config() -> dict[str, Any]:
@@ -194,23 +229,39 @@ def search_adzuna(config: dict[str, Any]) -> list[dict[str, Any]]:
         raise RuntimeError("Set ADZUNA_APP_ID and ADZUNA_APP_KEY environment variables")
 
     titles = config["target_titles"]
-    # Configured search_terms are curated for breadth. Add title aliases while
-    # enforcing a query ceiling to keep daily Adzuna API use predictable.
-    terms = list(dict.fromkeys(str(term) for term in config.get("search_terms", [])))
-    for title in titles:
-        for term in TITLE_SEARCH_TERMS.get(title, (title,)):
-            if term not in terms:
-                terms.append(term)
-
     search_cfg = config.get("search", {})
     per_page = int(search_cfg.get("results_per_query", 30))
     pages = int(search_cfg.get("pages", 2))
     max_queries = int(search_cfg.get("max_queries_per_country", 18))
+    core_terms = unique_terms([str(term) for term in config.get("search_terms", [])])
+    model_terms = unique_terms([str(term) for term in config.get("business_model_search_terms", [])])
+    title_groups = [list(TITLE_SEARCH_TERMS.get(title, (title,))) for title in titles]
+    core_slots = min(max(0, int(search_cfg.get("core_query_slots", 6))), max_queries)
+    model_slots = min(
+        max(0, int(search_cfg.get("business_model_query_slots", 7))),
+        max_queries - core_slots,
+    )
+    title_slots = max_queries - core_slots - model_slots
+    terms = unique_terms(
+        core_terms[:core_slots]
+        + model_terms[:model_slots]
+        + spread_title_terms(title_groups, title_slots)
+    )
+    # Backfill any slots freed by duplicates, keeping the request ceiling fixed.
+    remaining_title_terms = [term for group in title_groups for term in group]
+    seen_terms = {normalize(term) for term in terms}
+    for term in core_terms[core_slots:] + model_terms[model_slots:] + remaining_title_terms:
+        key = normalize(term)
+        if len(terms) >= max_queries:
+            break
+        if key not in seen_terms:
+            terms.append(term)
+            seen_terms.add(key)
+
     retries = int(search_cfg.get("api_retries", 3))
     backoff_seconds = float(search_cfg.get("retry_backoff_seconds", 2))
     max_retry_delay = float(search_cfg.get("max_retry_delay_seconds", 30))
     max_consecutive_failures = int(search_cfg.get("max_consecutive_failed_pages", 4))
-    terms = terms[:max_queries]
     found: dict[str, dict[str, Any]] = {}
     duplicates_collapsed = 0
     session = requests.Session()
@@ -485,12 +536,21 @@ def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[
     matched_models = [
         name for name, phrases in business_models.items() if contains_any(text, phrases)
     ]
+    model_fit = config.get("scoring", {}).get("business_model_fit", {})
+    if "consumer_b2c" in matched_models:
+        business_model_score = float(model_fit.get("consumer_b2c", 1.0))
+    elif "b2b2c_and_partner" in matched_models:
+        business_model_score = float(model_fit.get("b2b2c_and_partner", 0.9))
+    elif "b2b_transferable" in matched_models:
+        business_model_score = float(model_fit.get("b2b_transferable", 0.3))
+    else:
+        business_model_score = float(model_fit.get("unspecified", 0.45))
     direct_groups = [name for name in competencies if name != "role_scope"]
     features = {
         "direct_experience": sum(name in matched_competencies for name in direct_groups) / max(1, len(direct_groups)),
         "transferable_responsibilities": float("role_scope" in matched_competencies),
         "industry": len(matched_industries) / max(1, len(industries)),
-        "business_model": len(matched_models) / max(1, len(business_models)),
+        "business_model": business_model_score,
         "workplace": workplace_fit(job, config),
         "language": language_fit(raw_text, config),
         "visa": visa_fit(job, config),
