@@ -13,7 +13,7 @@ Built for PMM, where great-fit roles often hide behind unexpected titles. Lookin
 - Scouts Adzuna in English and French for PMM and adjacent roles—even when the title is unexpected.
 - Matches each listing to your CV, transferable strengths, target industries, and work preferences, then ranks the best fits.
 - Gives recently posted roles a small nudge up the list.
-- Emails up to 10 roles you haven’t received before. Keep the emails as your personal job-hunt archive.
+- Emails up to 10 sparkly new-to-you roles each morning.
 - Optional quest note: why a role aligns with your experience and the main reason it may not.
 
 ## Make it yours
