@@ -1,4 +1,4 @@
-name: Daily PMM Job Hunter
+name: PMM Job Hunt Fairy
 
 on:
   schedule:

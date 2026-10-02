@@ -38,4 +38,4 @@ Map your career quest once in `config.yaml`, and your PMM Job Hunt Fairy will se
 3. Set the delivery address in `notification_email` in `config.yaml`, or use the `JOB_ALERT_EMAIL` secret to override it. You can also add `JOB_ALERT_NAME` for your greeting and `OPENAI_API_KEY` for the optional quest note.
 4. Make sure GitHub Actions is enabled. You can click **Run workflow** once as a setup check; the daily schedule itself runs automatically.
 
-Your shortlist arrives by email at **7:15 AM Paris time**. Want your fairy to make an extra scouting trip today? In your repository, open **Actions → Daily PMM Job Hunter → Run workflow**.
+Your shortlist arrives by email at **7:15 AM Paris time**. Want your fairy to make an extra scouting trip today? In your repository, open **Actions → PMM Job Hunt Fairy → Run workflow**.
