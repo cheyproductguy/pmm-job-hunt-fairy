@@ -161,10 +161,28 @@ def canonical_job_key(job: dict[str, Any]) -> str:
     return "|".join(parts)
 
 
+def matched_industries(job: dict[str, Any], config: dict[str, Any]) -> list[str]:
+    """Return target sectors, applying configured context-based deprioritizers."""
+    industries = config.get("target_industries", {})
+    text = job_text(job)
+    filters = config.get("industry_context_filters", {})
+    business_models = config.get("business_model_focus", {})
+    matched = []
+    for name, phrases in industries.items():
+        if not contains_any(text, phrases):
+            continue
+        rule = filters.get(name, {})
+        if contains_any(text, rule.get("deprioritize_if_any", [])):
+            exempt_models = rule.get("unless_business_models", [])
+            if not any(contains_any(text, business_models.get(model, [])) for model in exempt_models):
+                continue
+        matched.append(name)
+    return matched
+
+
 def industry_label(job: dict[str, Any], config: dict[str, Any]) -> str:
     """Use a matched target sector, then fall back to Adzuna's job category."""
-    industries = config.get("target_industries", {})
-    matched = [name.replace("_", " ").title() for name, phrases in industries.items() if contains_any(job_text(job), phrases)]
+    matched = [name.replace("_", " ").title() for name in matched_industries(job, config)]
     if matched:
         return ", ".join(matched)
 
@@ -529,9 +547,7 @@ def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[
         if contains_any(text, phrases)
     ]
     industries = config.get("target_industries", {})
-    matched_industries = [
-        name for name, phrases in industries.items() if contains_any(text, phrases)
-    ]
+    matched_industry_names = matched_industries(job, config)
     business_models = config.get("business_model_focus", {})
     matched_models = [
         name for name, phrases in business_models.items() if contains_any(text, phrases)
@@ -549,7 +565,7 @@ def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[
     features = {
         "direct_experience": sum(name in matched_competencies for name in direct_groups) / max(1, len(direct_groups)),
         "transferable_responsibilities": float("role_scope" in matched_competencies),
-        "industry": len(matched_industries) / max(1, len(industries)),
+        "industry": len(matched_industry_names) / max(1, len(industries)),
         "business_model": business_model_score,
         "workplace": workplace_fit(job, config),
         "language": language_fit(raw_text, config),
@@ -572,7 +588,7 @@ def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[
         elif age_days <= 7:
             total += float(recency_rules.get("within_7_days", 0.2))
     total = min(10.0, total)
-    matched = matched_competencies + [f"industry:{item}" for item in matched_industries]
+    matched = matched_competencies + [f"industry:{item}" for item in matched_industry_names]
     return round(total, 1), matched
 
 

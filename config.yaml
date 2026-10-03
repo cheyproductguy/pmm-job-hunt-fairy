@@ -218,10 +218,8 @@ business_model_focus:
     - enterprise
     - PME
     - professionnels
-    - commercial and industrial
-    - industrial customers
-    - clients industriels
-    - entreprises
+    # Broad organization terms intentionally omitted: a short industrial
+    # client project is transferable experience, not a target business model.
 
 target_industries:
   insurance:
@@ -244,8 +242,6 @@ target_industries:
     - smart thermostats
     - heat pumps
     - efficient appliances
-    - industrial energy efficiency
-    - small business energy programs
     - énergie
     - électricité
     - efficacité énergétique
@@ -255,8 +251,6 @@ target_industries:
     - thermostats intelligents
     - pompes à chaleur
     - appareils écoénergétiques
-    - efficacité énergétique industrielle
-    - programmes énergétiques pour PME
   technology:
     - technology
     - software
@@ -266,13 +260,23 @@ target_industries:
     - plateforme numérique
     - logiciel
     - produit numérique
-  health:
-    - health
-    - healthcare
-    - healthtech
-    - santé
-    - soins de santé
-    - technologie médicale
+
+# Industrial-client work remains valid CV evidence, but is not a target lane.
+# Suppress the energy-industry boost on industrial-focused listings unless the
+# role also clearly serves consumers or channel/utility partners.
+industry_context_filters:
+  energy:
+    deprioritize_if_any:
+      - industrial clients
+      - industrial customers
+      - industrial energy efficiency
+      - industrial demand response
+      - clients industriels
+      - clientèle industrielle
+      - efficacité énergétique industrielle
+    unless_business_models:
+      - consumer_b2c
+      - b2b2c_and_partner
 
 locations:
   france:
