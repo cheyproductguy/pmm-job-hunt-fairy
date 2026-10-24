@@ -1,7 +1,7 @@
 """Find, score, and email the best relevant PMM roles from Adzuna."""
- 
+
 from __future__ import annotations
- 
+
 import html
 import json
 import logging
@@ -18,13 +18,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
- 
+
 import requests
 import yaml
- 
+
 from filters import compile_title_patterns, engineering_degree_requirement, matching_title_keyword
- 
- 
+
+
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config.yaml"
 CV_PATH = ROOT / "cv.txt"
@@ -33,7 +33,7 @@ ADZUNA_URL = "https://api.adzuna.com/v1/api/jobs/{country}/search/{page}"
 LOG = logging.getLogger("pmm_job_hunter")
 REQUEST_TIMEOUT = 25
 ACRONYM_SIGNALS = {"b2b", "b2c", "b2b2c", "d2c", "dtc", "sme", "pme", "voc", "jtbd", "sdr", "bdr"}
- 
+
 TITLE_SEARCH_TERMS = {
     "Product Marketing Manager": ("Product Marketing Manager", "Responsable marketing produit"),
     "PMM": ("PMM", "Product Marketing"),
@@ -48,14 +48,14 @@ TITLE_SEARCH_TERMS = {
     "Growth Marketing Manager": ("Growth Marketing Manager", "Growth marketing"),
     "Chef de produit": ("Chef de produit", "Product Manager"),
 }
- 
- 
+
+
 def normalize(text: str) -> str:
     """Lowercase text and remove accents for bilingual substring matching."""
     decomposed = unicodedata.normalize("NFKD", text.lower())
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
- 
- 
+
+
 def unique_terms(terms: list[str]) -> list[str]:
     """Preserve term order while deduplicating case- and accent-insensitively."""
     unique: list[str] = []
@@ -67,8 +67,8 @@ def unique_terms(terms: list[str]) -> list[str]:
             unique.append(value)
             seen.add(key)
     return unique
- 
- 
+
+
 def spread_title_terms(groups: list[list[str]], limit: int) -> list[str]:
     """Select title variants across the full target list, then add extra aliases."""
     groups = [unique_terms(group) for group in groups if group]
@@ -89,8 +89,8 @@ def spread_title_terms(groups: list[list[str]], limit: int) -> list[str]:
                 if term not in selected and len(selected) < limit:
                     selected.append(term)
     return selected[:limit]
- 
- 
+
+
 def load_config() -> dict[str, Any]:
     with CONFIG_PATH.open("r", encoding="utf-8") as stream:
         config = yaml.safe_load(stream) or {}
@@ -99,8 +99,8 @@ def load_config() -> dict[str, Any]:
     ):
         raise ValueError("config.yaml must define target_titles and title-exclusion keywords")
     return config
- 
- 
+
+
 def load_history() -> set[str]:
     try:
         with HISTORY_PATH.open("r", encoding="utf-8") as stream:
@@ -115,15 +115,15 @@ def load_history() -> set[str]:
     except (json.JSONDecodeError, OSError) as exc:
         LOG.warning("Could not read sent-job history (%s); starting empty", exc)
         return set()
- 
- 
+
+
 def save_history(sent_ids: set[str]) -> None:
     HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
     temporary = HISTORY_PATH.with_suffix(".tmp")
     temporary.write_text(json.dumps({"sent_ids": sorted(sent_ids)}, indent=2), encoding="utf-8")
     temporary.replace(HISTORY_PATH)
- 
- 
+
+
 def job_text(job: dict[str, Any]) -> str:
     company = job.get("company", {})
     location = job.get("location", {})
@@ -136,22 +136,22 @@ def job_text(job: dict[str, Any]) -> str:
             str(location.get("display_name", "") if isinstance(location, dict) else location),
         ]
     )
- 
- 
+
+
 def job_identifier(job: dict[str, Any]) -> str:
     return str(job.get("id") or job.get("redirect_url") or job.get("title", "unknown"))
- 
- 
+
+
 def canonical_job_key(job: dict[str, Any]) -> str:
     """Collapse duplicate copies of one posting returned by different search queries."""
     company = job.get("company", {})
     location = job.get("location", {})
     company_name = company.get("display_name", "") if isinstance(company, dict) else company
     location_name = location.get("display_name", "") if isinstance(location, dict) else location
- 
+
     def compact(value: Any) -> str:
         return re.sub(r"[^a-z0-9]+", " ", normalize(str(value))).strip()
- 
+
     parts = [
         str(job.get("_country_code", "")),
         compact(job.get("title", "")),
@@ -161,8 +161,8 @@ def canonical_job_key(job: dict[str, Any]) -> str:
     if not parts[1] or not parts[2]:
         return job_identifier(job)
     return "|".join(parts)
- 
- 
+
+
 def matched_industries(job: dict[str, Any], config: dict[str, Any]) -> list[str]:
     """Return target sectors, applying configured context-based deprioritizers."""
     industries = config.get("target_industries", {})
@@ -180,22 +180,22 @@ def matched_industries(job: dict[str, Any], config: dict[str, Any]) -> list[str]
                 continue
         matched.append(name)
     return matched
- 
- 
+
+
 def industry_label(job: dict[str, Any], config: dict[str, Any]) -> str:
     """Use a matched target sector, then fall back to Adzuna's job category."""
     matched = [name.replace("_", " ").title() for name in matched_industries(job, config)]
     if matched:
         return ", ".join(matched)
- 
+
     category = job.get("category", {})
     if isinstance(category, dict):
         label = category.get("label") or category.get("tag")
     else:
         label = category
     return str(label or "Not specified")
- 
- 
+
+
 def request_adzuna_page(
     session: requests.Session,
     url: str,
@@ -219,7 +219,7 @@ def request_adzuna_page(
             LOG.warning("Adzuna network error (%s); retrying in %.1fs", last_status, delay)
             time.sleep(delay)
             continue
- 
+
         if response.ok:
             return response, None, attempt + 1
         status = response.status_code
@@ -231,7 +231,7 @@ def request_adzuna_page(
             )
         if attempt + 1 >= attempts:
             return None, last_status, attempts
- 
+
         retry_after = response.headers.get("Retry-After", "")
         try:
             delay = float(retry_after)
@@ -241,13 +241,13 @@ def request_adzuna_page(
         LOG.warning("Adzuna returned HTTP %s; retrying in %.1fs", status, delay)
         time.sleep(delay)
     return None, last_status, attempts
- 
- 
+
+
 def search_adzuna(config: dict[str, Any]) -> list[dict[str, Any]]:
     app_id, app_key = os.getenv("ADZUNA_APP_ID"), os.getenv("ADZUNA_APP_KEY")
     if not app_id or not app_key:
         raise RuntimeError("Set ADZUNA_APP_ID and ADZUNA_APP_KEY environment variables")
- 
+
     titles = config["target_titles"]
     search_cfg = config.get("search", {})
     per_page = int(search_cfg.get("results_per_query", 30))
@@ -277,7 +277,7 @@ def search_adzuna(config: dict[str, Any]) -> list[dict[str, Any]]:
         if key not in seen_terms:
             terms.append(term)
             seen_terms.add(key)
- 
+
     retries = int(search_cfg.get("api_retries", 3))
     backoff_seconds = float(search_cfg.get("retry_backoff_seconds", 2))
     max_retry_delay = float(search_cfg.get("max_retry_delay_seconds", 30))
@@ -351,8 +351,8 @@ def search_adzuna(config: dict[str, Any]) -> list[dict[str, Any]]:
     if duplicates_collapsed:
         LOG.info("Collapsed %d duplicate listing copies", duplicates_collapsed)
     return list(found.values())
- 
- 
+
+
 def contains_any(text: str, phrases: list[str] | tuple[str, ...]) -> bool:
     normalized = normalize(text)
     for phrase in phrases:
@@ -363,8 +363,8 @@ def contains_any(text: str, phrases: list[str] | tuple[str, ...]) -> bool:
         elif candidate in normalized:
             return True
     return False
- 
- 
+
+
 def posted_at(job: dict[str, Any]) -> datetime | None:
     created = job.get("created")
     if not created:
@@ -376,16 +376,16 @@ def posted_at(job: dict[str, Any]) -> datetime | None:
         return parsed.astimezone(timezone.utc)
     except ValueError:
         return None
- 
- 
+
+
 def posting_age_days(job: dict[str, Any]) -> float | None:
     posted = posted_at(job)
     if posted is None:
         return None
     age = (datetime.now(timezone.utc) - posted).total_seconds() / 86400
     return max(0.0, age)
- 
- 
+
+
 def posting_date_label(job: dict[str, Any]) -> str:
     posted = posted_at(job)
     if posted is None:
@@ -400,15 +400,15 @@ def posting_date_label(job: dict[str, Any]) -> str:
     else:
         age_label = f"{whole_days} days ago"
     return f"{local_posted:%d %b %Y} · {age_label}"
- 
- 
+
+
 def is_recent(job: dict[str, Any], max_age_days: int) -> bool:
     posted = posted_at(job)
     if posted is None:
         return True
     return posted >= datetime.now(timezone.utc) - timedelta(days=max_age_days)
- 
- 
+
+
 def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str | None:
     """Return a reason when a posting states an excluded minimum experience level."""
     rules = config.get("seniority_filters", {})
@@ -432,7 +432,22 @@ def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str |
             rf"[^.!?;\n]{{0,25}}\b(?:minimum|required|at least|au moins)\b"
         ),
     )
+    # Looser phrasings without "minimum" or "+": "10 ans d'expérience",
+    # "10 years of experience", "plus de 10 ans". These are skipped when the
+    # sentence talks about the company ("depuis plus de 30 ans, nous...").
+    loose_patterns = (
+        re.compile(
+            rf"\b(?P<years>\d{{1,2}})\s*{year_units}\s*"
+            rf"(?:d\W{{0,2}}|de\s+|of\s+|\W{{0,2}}\s*)experience\b"
+        ),
+        re.compile(rf"\b(?:plus de|more than|over)\s+(?P<years>\d{{1,2}})\s*{year_units}\b"),
+    )
+    company_context = re.compile(
+        r"\b(?:nous|notre|nos|we|our|depuis|since|founded|fondee?|leader|history|histoire)\b"
+    )
     preferred_signals = [normalize(item) for item in rules.get("preferred_signals", [])]
+    preferred_before = int(rules.get("preferred_window_chars_before", 25))
+    preferred_after = int(rules.get("preferred_window_chars_after", 30))
     b2b_term = r"(?:b\s*(?:2|to)\s*b|business[- ]to[- ]business)"
     b2c_term = r"b\s*(?:2|to)\s*c"
     b2b2c_term = r"b\s*(?:2|to)\s*b\s*(?:2|to)\s*c"
@@ -446,8 +461,9 @@ def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str |
     )
     pure_b2b_required = bool(rules.get("exclude_explicit_pure_b2b_requirement", True))
     required_signals = [normalize(item) for item in rules.get("pure_b2b_requirement_signals", [])]
- 
-    for pattern in patterns:
+
+    for pattern in patterns + loose_patterns:
+        is_loose = pattern in loose_patterns
         for match in pattern.finditer(normalized):
             years = int(match.group("years"))
             # Limit context to the same sentence so nearby unrelated benefits
@@ -457,9 +473,22 @@ def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str |
             right_candidates = [position for position in right_candidates if position >= 0]
             right_edge = min(right_candidates) if right_candidates else len(normalized)
             sentence = normalized[left_edge:right_edge]
-            if any(signal in sentence for signal in preferred_signals):
+            if is_loose and company_context.search(sentence):
                 continue
- 
+            # For ranges like "5 à 8 ans", only the lower bound counts (handled by the
+            # range pattern), so ignore the upper number here.
+            if is_loose and re.search(r"\d\s*(?:a|to|and|et|[-–—])\s*$", normalized[: match.start()]):
+                continue
+            # Adzuna text often has no sentence breaks, so only look at the words
+            # right around the number instead of the whole stretch of text.
+            near = (
+                normalized[max(0, match.start() - preferred_before) : match.start()]
+                + " "
+                + normalized[match.end() : match.end() + preferred_after]
+            )
+            if any(signal in near for signal in preferred_signals):
+                continue
+
             # A stated experience range tied to pure B2B is itself an explicit
             # experience requirement, even if the posting omits "required".
             is_pure_b2b = bool(b2b_pattern.search(sentence)) and not bool(mixed_b2b_pattern.search(sentence))
@@ -470,7 +499,7 @@ def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str |
             cap = int(caps.get("overall_years", 0))
             if cap and years >= cap:
                 return f"{years}+ years required overall (screen-out threshold: {cap})"
- 
+
     if pure_b2b_required:
         for sentence in re.split(r"[.;!?\n]+", normalized):
             if any(signal in sentence for signal in preferred_signals):
@@ -480,22 +509,22 @@ def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str |
             if any(signal in sentence for signal in required_signals):
                 return "explicit pure B2B experience requirement"
     return None
- 
- 
+
+
 def meets_language_rule(text: str, config: dict[str, Any]) -> bool:
     language = config.get("language_rules", {})
     if not language.get("require_english_role_signal", True):
         return True
     return contains_any(text, language.get("english_role_signals", []))
- 
- 
+
+
 def meets_switzerland_sponsorship(job: dict[str, Any], config: dict[str, Any]) -> bool:
     if job.get("_country_code") != config["locations"]["switzerland"]["country_code"]:
         return True
     visa = config["locations"]["switzerland"].get("visa_sponsorship", {})
     return not visa.get("required", False) or contains_any(job_text(job), visa.get("signals", []))
- 
- 
+
+
 def workplace_fit(job: dict[str, Any], config: dict[str, Any]) -> float:
     text = normalize(job_text(job))
     remote_signals = ("remote", "fully remote", "teletravail", "100% a distance", "work from anywhere")
@@ -518,8 +547,8 @@ def workplace_fit(job: dict[str, Any], config: dict[str, Any]) -> float:
     if not has_workplace_model:
         return float(workplace.get("unspecified", 0.45))
     return float(workplace.get("other", 0.2))
- 
- 
+
+
 def language_fit(text: str, config: dict[str, Any]) -> float:
     rules = config.get("language_rules", {})
     scoring = config.get("scoring", {}).get("language", {})
@@ -528,8 +557,8 @@ def language_fit(text: str, config: dict[str, Any]) -> float:
     if contains_any(text, rules.get("french_role_signals", [])):
         return float(scoring.get("french_signal", 0.8))
     return float(scoring.get("unspecified", 0.65))
- 
- 
+
+
 def visa_fit(job: dict[str, Any], config: dict[str, Any]) -> float:
     if job.get("_country_code") != config["locations"]["switzerland"]["country_code"]:
         return 1.0
@@ -537,8 +566,8 @@ def visa_fit(job: dict[str, Any], config: dict[str, Any]) -> float:
     if contains_any(job_text(job), visa.get("signals", [])):
         return float(config.get("scoring", {}).get("visa", {}).get("sponsorship_signal", 1.0))
     return float(config.get("scoring", {}).get("visa", {}).get("unspecified", 0.5))
- 
- 
+
+
 def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[str]]:
     raw_text = job_text(job)
     text = normalize(raw_text)
@@ -592,8 +621,8 @@ def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[
     total = min(10.0, total)
     matched = matched_competencies + [f"industry:{item}" for item in matched_industry_names]
     return round(total, 1), matched
- 
- 
+
+
 def filter_and_score(
     jobs: list[dict[str, Any]], config: dict[str, Any], history: set[str]
 ) -> list[dict[str, Any]]:
@@ -640,13 +669,13 @@ def filter_and_score(
     if seniority_excluded:
         LOG.info("Screened out %d listing(s) for explicit experience minimums", seniority_excluded)
     return sorted(matches, key=lambda job: (-job["fit_score"], str(job.get("created", ""))))
- 
- 
+
+
 def safe_url(value: str) -> str:
     parsed = urlparse(value)
     return value if parsed.scheme in {"http", "https"} and parsed.netloc else "#"
- 
- 
+
+
 def load_cv() -> str:
     """Load the bilingual profile used for optional AI match rationales."""
     try:
@@ -654,8 +683,8 @@ def load_cv() -> str:
     except OSError as exc:
         LOG.warning("Could not read CV profile for rationales: %s", exc)
         return ""
- 
- 
+
+
 def get_ai_rationale(job: dict[str, Any], cv_text: str) -> str | None:
     """Generate an optional, brief fit rationale when OPENAI_API_KEY is set."""
     api_key = os.getenv("OPENAI_API_KEY")
@@ -663,7 +692,7 @@ def get_ai_rationale(job: dict[str, Any], cv_text: str) -> str | None:
         return None
     try:
         from openai import OpenAI
- 
+
         client = OpenAI(api_key=api_key)
         prompt = (
             "Compare this candidate profile with the job. In two concise sentences, "
@@ -686,8 +715,8 @@ def get_ai_rationale(job: dict[str, Any], cv_text: str) -> str | None:
     except Exception as exc:  # AI summaries are optional; search/email still work.
         LOG.warning("Could not generate an AI rationale: %s", exc)
         return None
- 
- 
+
+
 def format_email(jobs: list[dict[str, Any]], user_name: str) -> tuple[str, str]:
     paris_now = datetime.now(ZoneInfo("Europe/Paris"))
     date_label = paris_now.strftime("%d %b %Y")
@@ -750,8 +779,8 @@ def format_email(jobs: list[dict[str, Any]], user_name: str) -> tuple[str, str]:
         + "\n\n".join(plain_rows)
     )
     return plain, html_body
- 
- 
+
+
 def send_email(jobs: list[dict[str, Any]], recipient: str, user_name: str) -> None:
     sender = os.getenv("GMAIL_ADDRESS")
     password = os.getenv("GMAIL_APP_PASSWORD")
@@ -769,8 +798,8 @@ def send_email(jobs: list[dict[str, Any]], recipient: str, user_name: str) -> No
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context, timeout=30) as smtp:
         smtp.login(sender, password)
         smtp.send_message(message)
- 
- 
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     config = load_config()
@@ -801,8 +830,8 @@ def main() -> int:
     save_history(history)
     LOG.info("Emailed the top %d matches to %s", len(email_jobs), recipient)
     return 0
- 
- 
+
+
 if __name__ == "__main__":
     try:
         sys.exit(main())
