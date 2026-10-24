@@ -1,4 +1,3 @@
-Main · PY
 """Find, score, and email the best relevant PMM roles from Adzuna."""
  
 from __future__ import annotations
