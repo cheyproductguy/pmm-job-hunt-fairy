@@ -326,10 +326,10 @@ language_rules:
     - français professionnel
     - français bilingue
 
-# These exclusions are checked against the job title only. This avoids
-# rejecting good enablement or cross-functional roles because a description
-# mentions sales leaders, engineering partners, or marketing operations teams.
-
+# These exclusions are checked against the job title only, as whole words
+# (accents and capitals are ignored). This avoids rejecting good enablement or
+# cross-functional roles because a description mentions sales leaders,
+# engineering partners, or marketing operations teams.
 negative_title_keywords:
   # Sales and business development
   - sales executive
@@ -372,8 +372,10 @@ negative_title_keywords:
   - étudiant
   - étudiante
   - jeune diplômé
-  - jeune diplome
+  - jeune diplôme
+  - jeune diplômée
   - diplômé
+  - diplômée
   - graduate
   - graduate programme
   - volontariat
@@ -409,6 +411,8 @@ search:
   # Keep adjacent and transferable matches in the digest; the email remains capped at 10.
   minimum_fit_score: 3.0
   max_email_results: 10
+  # Log every job dropped by the title filter. Review for a week, then set to false.
+  log_rejected_titles: true
 
 # Screen out high overall experience minimums and explicit pure-B2B experience
 # requirements (including ranges such as "5 à 10 ans" / "5-10 years").
@@ -444,11 +448,15 @@ seniority_filters:
     - apprécié
     - un atout
 
+# Reject postings that require an engineering diploma. A degree phrase counts as
+# required unless a preferred signal sits right next to it, or an alternative
+# (such as "école de commerce") appears nearby.
 degree_filters:
   exclude_explicit_engineering_degree_requirement: true
   default_is_requirement: true
   preferred_window_chars_before: 30
   preferred_window_chars_after: 15
+  alternative_window_chars: 60
   engineering_degree_signals:
     - engineering degree
     - engineering diploma
@@ -466,6 +474,23 @@ degree_filters:
     - école d'ingénieurs
     - profil ingénieur
     - bac+5 ingénieur
+  preferred_signals:
+    - idéalement
+    - ideally
+    - de préférence
+    - preferably
+    - souhaité
+    - souhaitable
+    - apprécié
+    - un atout
+    - serait un plus
+    - est un plus
+    - is a plus
+    - would be a plus
+    - nice to have
+    - an advantage
+    - desirable
+    - preferred
   alternative_signals:
     - école de commerce
     - ou équivalent
