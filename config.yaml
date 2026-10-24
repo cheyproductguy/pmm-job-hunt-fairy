@@ -415,11 +415,11 @@ search:
   log_rejected_titles: true
 
 # Screen out high overall experience minimums and explicit pure-B2B experience
-# requirements (including ranges such as "5 à 10 ans" / "5-10 years").
+# requirements (including ranges such as "1 à 8 ans" / "1-8 years").
 # Preferred/desirable experience is not treated as a hard requirement.
 seniority_filters:
   screen_out_minimums_at_or_above:
-    overall_years: 10
+    overall_years: 8
   exclude_explicit_pure_b2b_minimum: true
   exclude_explicit_pure_b2b_requirement: true
   pure_b2b_requirement_signals:
