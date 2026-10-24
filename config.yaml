@@ -502,7 +502,7 @@ degree_filters:
 # Choose balanced, cv_evidence, or adjacent_discovery as active_profile.
 # Profiles are relative weights; the app normalizes every result to /10.
 scoring:
-  active_profile: adjacent_discovery
+  active_profile: cv_evidence
   profiles:
     balanced:
       direct_experience: 3.25
