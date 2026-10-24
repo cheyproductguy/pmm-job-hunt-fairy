@@ -5,7 +5,6 @@ target_titles:
   - Product Marketing Specialist
   - Go-to-Market Manager
   - GTM Manager
-  - Product Manager, Growth
   - Growth Marketing Manager
   - Customer Marketing Manager
   - Market Insights Manager
@@ -330,39 +329,67 @@ language_rules:
 # These exclusions are checked against the job title only. This avoids
 # rejecting good enablement or cross-functional roles because a description
 # mentions sales leaders, engineering partners, or marketing operations teams.
+
 negative_title_keywords:
+  # Sales and business development
   - sales executive
   - sales specialist
+  - sales representative
   - account executive
+  - account manager
   - business development
   - sdr
   - bdr
-  - account manager
-  - sales representative
+
+  # Seniority
   - director
+  - directeur
+  - directrice
+  - head of
   - vp
+  - vice president
+  - vice-president
+  - vice président
   - chief marketing officer
   - cmo
+
+  # Internships and students
   - intern
+  - internship
   - apprentice
   - apprenticeship
   - student
   - working student
+  - trainee
+  - stage
+  - stagiaire
   - apprenti
   - apprentie
   - apprentissage
-  - étudiant
-  - étudiante
+  - alternance
   - alternant
   - alternante
-  - alternance
-  - stagiaire
-  - stage
+  - étudiant
+  - étudiante
+  - jeune diplômé
   - jeune diplome
+  - diplômé
+  - graduate
+  - graduate programme
+  - volontariat
+  - v.i.e
+
+  # Wrong function
   - hardware
   - engineering
+  - engineer
+  - ingénieur
+  - ingenieur
+  - ingénieure
+  - technico-commercial
   - marops
   - marketing operations
+  - product owner
 
 notification_email: chey.jobbot@gmail.com
 user_name: Cheyguy
@@ -416,6 +443,36 @@ seniority_filters:
     - souhaitable
     - apprécié
     - un atout
+
+degree_filters:
+  exclude_explicit_engineering_degree_requirement: true
+  default_is_requirement: true
+  preferred_window_chars_before: 30
+  preferred_window_chars_after: 15
+  engineering_degree_signals:
+    - engineering degree
+    - engineering diploma
+    - degree in engineering
+    - technical degree
+    - diplôme d'ingénieur
+    - diplôme d'ingénieure
+    - formation d'ingénieur
+    - formation ingénieur
+    - ingénieur de formation
+    - ingénieure de formation
+    - issu d'une école d'ingénieur
+    - issue d'une école d'ingénieur
+    - école d'ingénieur
+    - école d'ingénieurs
+    - profil ingénieur
+    - bac+5 ingénieur
+  alternative_signals:
+    - école de commerce
+    - ou équivalent
+    - or equivalent
+    - or business
+    - ou commerce
+    - ou école de commerce
 
 # Choose balanced, cv_evidence, or adjacent_discovery as active_profile.
 # Profiles are relative weights; the app normalizes every result to /10.
