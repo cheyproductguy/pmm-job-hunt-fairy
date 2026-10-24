@@ -812,5 +812,3 @@ if __name__ == "__main__":
     except (RuntimeError, ValueError, OSError) as exc:
         LOG.error("Job hunter failed: %s", exc)
         sys.exit(1)
- 
-Claude finished the response
