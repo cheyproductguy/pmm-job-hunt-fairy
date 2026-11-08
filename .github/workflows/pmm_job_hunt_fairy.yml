@@ -6,6 +6,12 @@ on:
     - cron: '15 7 * * *'
       timezone: Europe/Paris
   workflow_dispatch:
+    inputs:
+      test_email:
+        description: Send a test digest using current criteria without changing sent-role history
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   run-job-hunter:
@@ -40,6 +46,7 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           JOB_ALERT_EMAIL: ${{ secrets.JOB_ALERT_EMAIL }}
           JOB_ALERT_NAME: ${{ secrets.JOB_ALERT_NAME }}
+          JOB_ALERT_TEST_EMAIL: ${{ inputs.test_email }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: python main.py
 

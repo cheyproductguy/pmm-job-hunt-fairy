@@ -46,7 +46,9 @@ TITLE_SEARCH_TERMS = {
     "Product Strategy Manager": ("Product Strategy Manager", "Stratégie produit"),
     "Portfolio Marketing Manager": ("Portfolio Marketing Manager", "Marketing de portefeuille"),
     "Growth Marketing Manager": ("Growth Marketing Manager", "Growth marketing"),
-    "Chef de produit": ("Chef de produit", "Product Manager"),
+    # Keep the French product/offer role searchable without querying generic
+    # Product Manager roles, which usually require product ownership skills.
+    "Chef de produit": ("Chef de produit",),
 }
 
 
@@ -789,11 +791,13 @@ def get_ai_rationale(job: dict[str, Any], cv_text: str) -> str | None:
         return None
 
 
-def format_email(jobs: list[dict[str, Any]], user_name: str) -> tuple[str, str]:
+def format_email(
+    jobs: list[dict[str, Any]], user_name: str, test_mode: bool = False
+) -> tuple[str, str]:
     paris_now = datetime.now(ZoneInfo("Europe/Paris"))
     date_label = paris_now.strftime("%d %b %Y")
     first_name = user_name.strip().split()[0] if user_name.strip() else "Friend"
-    preview_text = "Job matches based on your PMM magic✨"
+    preview_text = "TEST DIGEST — current criteria, independent of sent-role history." if test_mode else "Job matches based on your PMM magic✨"
     encouragement = (
         f"Good morning, {user_name.strip() or first_name}! Your PMM Job Hunt Fairy has been "
         "scouting beyond the usual titles for roles that fit your experience and career-quest "
@@ -829,19 +833,25 @@ def format_email(jobs: list[dict[str, Any]], user_name: str) -> tuple[str, str]:
             f"{title} | {company} | {sector} | {score}/10 | {location} | Posted {posted}\nApply: {link}"
             + (f"\nWhy it may fit: {rationale}" if rationale else "")
         )
+    test_banner = (
+        "<p style='padding:10px;background:#fff4cc;color:#7a4b00'><b>Test digest:</b> current criteria and rankings; sent-role history was left unchanged.</p>"
+        if test_mode
+        else ""
+    )
     html_body = (
         "<html><body style='font-family:Arial,sans-serif;color:#101828;max-width:900px;margin:auto'>"
         f"<div style='display:none;max-height:0;overflow:hidden;opacity:0;color:transparent'>{html.escape(preview_text)}</div>"
         f"<h2>{html.escape(first_name)}’s PMM Job Hunt Fairy 🧚</h2>"
         f"<p>{html.escape(date_label)}</p>"
-        f"<p>{html.escape(encouragement)}</p>"
-        f"<p>Your top {len(jobs)} eligible role(s), sorted by fit score:</p>"
-        "<table style='border-collapse:collapse;width:100%'><thead><tr>"
-        "<th align='left' style='padding:12px'>Role and company</th>"
-        "<th align='left' style='padding:12px'>Industry / category</th>"
-        "<th align='left' style='padding:12px'>Location</th>"
-        "<th align='left' style='padding:12px'>Posted</th>"
-        "<th style='padding:12px'>Fit</th></tr></thead><tbody>"
+        + test_banner
+        + f"<p>{html.escape(encouragement)}</p>"
+        + f"<p>Your top {len(jobs)} eligible role(s), sorted by fit score:</p>"
+        + "<table style='border-collapse:collapse;width:100%'><thead><tr>"
+        + "<th align='left' style='padding:12px'>Role and company</th>"
+        + "<th align='left' style='padding:12px'>Industry / category</th>"
+        + "<th align='left' style='padding:12px'>Location</th>"
+        + "<th align='left' style='padding:12px'>Posted</th>"
+        + "<th style='padding:12px'>Fit</th></tr></thead><tbody>"
         + "".join(rows)
         + "</tbody></table></body></html>"
     )
@@ -853,15 +863,18 @@ def format_email(jobs: list[dict[str, Any]], user_name: str) -> tuple[str, str]:
     return plain, html_body
 
 
-def send_email(jobs: list[dict[str, Any]], recipient: str, user_name: str) -> None:
+def send_email(
+    jobs: list[dict[str, Any]], recipient: str, user_name: str, test_mode: bool = False
+) -> None:
     sender = os.getenv("GMAIL_ADDRESS")
     password = os.getenv("GMAIL_APP_PASSWORD")
     if not sender or not password:
         raise RuntimeError("Set GMAIL_ADDRESS and GMAIL_APP_PASSWORD to send email")
-    plain, rich = format_email(jobs, user_name)
+    plain, rich = format_email(jobs, user_name, test_mode)
     message = EmailMessage()
     date_label = datetime.now(ZoneInfo("Europe/Paris")).strftime("%d %b %Y")
-    message["Subject"] = f"🧚 PMM Job Hunt Fairy | {date_label}"
+    prefix = "🧪 TEST — " if test_mode else ""
+    message["Subject"] = f"{prefix}🧚 PMM Job Hunt Fairy | {date_label}"
     message["From"] = sender
     message["To"] = recipient
     message.set_content(plain)
@@ -879,11 +892,14 @@ def main() -> int:
     if not recipient:
         raise RuntimeError("Set JOB_ALERT_EMAIL or notification_email in config.yaml")
     user_name = os.getenv("JOB_ALERT_NAME") or str(config.get("user_name", "Cheyguy"))
+    test_mode = os.getenv("JOB_ALERT_TEST_EMAIL", "").strip().lower() in {"1", "true", "yes"}
     history = load_history()
     jobs = search_adzuna(config)
-    matches = filter_and_score(jobs, config, history)
+    # A manual test may resend previously emailed roles to demonstrate updated
+    # ranking, but must not alter the daily deduplication history.
+    matches = filter_and_score(jobs, config, set() if test_mode else history)
     LOG.info("Fetched %d unique listings; %d unseen listings passed filters", len(jobs), len(matches))
-    if not matches:
+    if not matches and not test_mode:
         LOG.info("No listings passed the configured filters")
         return 0
     max_email_results = max(1, int(config.get("search", {}).get("max_email_results", 8)))
@@ -896,11 +912,14 @@ def main() -> int:
             rationale = get_ai_rationale(job, cv_text)
             if rationale:
                 job["rationale"] = rationale
-    send_email(email_jobs, recipient, user_name)
-    history.update(canonical_job_key(job) for job in email_jobs)
-    history.update(job_identifier(job) for job in email_jobs)
-    save_history(history)
-    LOG.info("Emailed the top %d matches to %s", len(email_jobs), recipient)
+    send_email(email_jobs, recipient, user_name, test_mode)
+    if test_mode:
+        LOG.info("Sent a test digest with %d matching roles to %s; history unchanged", len(email_jobs), recipient)
+    else:
+        history.update(canonical_job_key(job) for job in email_jobs)
+        history.update(job_identifier(job) for job in email_jobs)
+        save_history(history)
+        LOG.info("Emailed the top %d matches to %s", len(email_jobs), recipient)
     return 0
 
 
