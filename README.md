@@ -10,9 +10,9 @@ Built for PMM, where great-fit roles often hide behind unexpected titles. Lookin
 
 ## How it works
 
-- Scouts Adzuna in English and French for PMM and adjacent roles—even when the title is unexpected.
+- Scouts Adzuna in English and French for PMM and adjacent roles—even when the title is unexpected—using both titles and job functions like campaigns, events, channels, and retail marketing.
 - Matches listings to your CV, transferable strengths, consumer/partner business models, target industries, and work preferences, then ranks the best fits.
-- Recognizes growth, lifecycle, retention, and campaign experience in English and French.
+- Recognizes growth, lifecycle, campaign development, retail, event, channel enablement, and agency-management experience in English and French.
 - Gives recently posted roles a small nudge up the list.
 - Emails up to 10 sparkly new-to-you roles each morning.
 - Optional quest note: why a role aligns with your experience and the main reason it may not.

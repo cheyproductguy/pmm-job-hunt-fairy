@@ -448,7 +448,7 @@ def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str |
     preferred_signals = [normalize(item) for item in rules.get("preferred_signals", [])]
     preferred_before = int(rules.get("preferred_window_chars_before", 25))
     preferred_after = int(rules.get("preferred_window_chars_after", 30))
-    b2b_term = r"(?:b\s*(?:2|to)\s*b|business[- ]to[- ]business)"
+    b2b_term = r"(?:b\s*(?:2|to)\s*b|bto[b]|business[- ]to[- ]business)"
     b2c_term = r"b\s*(?:2|to)\s*c"
     b2b2c_term = r"b\s*(?:2|to)\s*b\s*(?:2|to)\s*c"
     b2b_pattern = re.compile(
@@ -552,11 +552,83 @@ def workplace_fit(job: dict[str, Any], config: dict[str, Any]) -> float:
 def language_fit(text: str, config: dict[str, Any]) -> float:
     rules = config.get("language_rules", {})
     scoring = config.get("scoring", {}).get("language", {})
-    if contains_any(text, rules.get("english_role_signals", [])):
+    english_first = contains_any(text, rules.get("english_role_signals", []))
+    high_french = contains_any(text, rules.get("high_french_proficiency_signals", []))
+    if high_french and english_first:
+        return float(scoring.get("english_with_high_french_requirement", 0.55))
+    if high_french:
+        return float(scoring.get("high_french_proficiency", 0.35))
+    if english_first:
         return float(scoring.get("english_signal", 1.0))
     if contains_any(text, rules.get("french_role_signals", [])):
         return float(scoring.get("french_signal", 0.8))
     return float(scoring.get("unspecified", 0.65))
+
+
+def seniority_adjustment(job: dict[str, Any], config: dict[str, Any]) -> float:
+    """Favor early PMM requirements and flag roles that imply a steep solo ramp."""
+    rules = config.get("seniority_filters", {})
+    soft = rules.get("soft_downrank", {})
+    description = normalize(str(job.get("description", "")))
+    title = normalize(str(job.get("title", "")))
+    preferred = [normalize(item) for item in rules.get("preferred_signals", [])]
+    pmm_signals = (
+        "product marketing",
+        "pmm",
+        "marketing produit",
+        "responsable marketing produit",
+        "chef de produit marketing",
+    )
+    similar_signals = [normalize(item) for item in soft.get("similar_role_signals", [])]
+    years_pattern = re.compile(
+        r"\b(?P<years>\d{1,2})(?:\s*(?:\+|[-–—]|to|a|and|et)\s*\d{1,2})?\s*"
+        r"(?:years?|yrs?|ans?|annees?)\b"
+    )
+    direct_pmm_5plus = False
+    similar_pmm_1_2 = False
+    threshold = int(soft.get("direct_pmm_years_threshold", 5))
+    desired_max = int(soft.get("desired_similar_role_years_max", 2))
+
+    for match in years_pattern.finditer(description):
+        left = max(description.rfind(mark, 0, match.start()) for mark in (".", ";", "!", "?", "\n")) + 1
+        right_candidates = [description.find(mark, match.end()) for mark in (".", ";", "!", "?", "\n")]
+        right_candidates = [index for index in right_candidates if index >= 0]
+        right = min(right_candidates) if right_candidates else len(description)
+        sentence = description[left:right]
+        near = description[max(left, match.start() - 35) : min(right, match.end() + 45)]
+        if any(signal and signal in near for signal in preferred):
+            continue
+
+        years = int(match.group("years"))
+        has_pmm_context = any(signal in sentence for signal in pmm_signals)
+        if not has_pmm_context and any(signal in sentence for signal in similar_signals):
+            has_pmm_context = any(signal in title for signal in pmm_signals)
+        if not has_pmm_context:
+            continue
+
+        if years >= threshold:
+            direct_pmm_5plus = True
+        elif years <= desired_max and any(signal in sentence for signal in similar_signals):
+            similar_pmm_1_2 = True
+
+    penalty = 0.0
+    if direct_pmm_5plus:
+        penalty += float(soft.get("direct_pmm_years_penalty", 0.8))
+
+    scope_signals = soft.get("solo_or_build_scope_signals", [])
+    solo_scope = contains_any(description, scope_signals)
+    if solo_scope:
+        penalty += float(soft.get("solo_scope_penalty", 0.8))
+        senior_titles = [normalize(item) for item in soft.get("senior_title_signals", [])]
+        if any(re.search(rf"(?<![a-z0-9]){re.escape(item)}(?![a-z0-9])", title) for item in senior_titles):
+            penalty += float(soft.get("senior_with_solo_scope_additional_penalty", 0.4))
+
+    penalty = min(penalty, float(soft.get("max_penalty", 1.8)))
+    if penalty:
+        return -penalty
+    if similar_pmm_1_2:
+        return float(soft.get("similar_role_years_bonus", 0.25))
+    return 0.0
 
 
 def visa_fit(job: dict[str, Any], config: dict[str, Any]) -> float:
@@ -618,7 +690,7 @@ def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[
             total += float(recency_rules.get("within_2_days", 0.5))
         elif age_days <= 7:
             total += float(recency_rules.get("within_7_days", 0.2))
-    total = min(10.0, total)
+    total = min(10.0, max(0.0, total + seniority_adjustment(job, config)))
     matched = matched_competencies + [f"industry:{item}" for item in matched_industry_names]
     return round(total, 1), matched
 
