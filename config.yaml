@@ -490,8 +490,9 @@ search:
 
 # Favor early-to-mid PMM scope while protecting transferable marketing experience.
 # Hard screen: principal titles, 5+ years specifically in PMM, explicit pure-B2B
-# requirements, and 8+ years overall. Marketing experience outside PMM remains
-# transferable and is not subject to the PMM-specific cap.
+# requirements, and 8+ years overall (so roles requiring up to 7 remain eligible).
+# Marketing experience outside PMM remains transferable and is not subject to
+# the PMM-specific cap.
 seniority_filters:
   screen_out_minimums_at_or_above:
     overall_years: 8
@@ -506,6 +507,7 @@ seniority_filters:
     direct_pmm_years_threshold: 5
     direct_pmm_years_penalty: 0.8
     desired_similar_role_years_max: 2
+    direct_pmm_years_bonus: 0.5
     similar_role_years_bonus: 0.25
     senior_title_signals: [senior, staff, principal]
     solo_or_build_scope_signals:
@@ -539,6 +541,7 @@ seniority_filters:
       - fonction similaire
   exclude_explicit_pure_b2b_minimum: true
   exclude_explicit_pure_b2b_requirement: true
+  exclude_mandatory_b2b_or_saas_experience: true
   pure_b2b_requirement_signals:
     - must have
     - is a must

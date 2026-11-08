@@ -576,14 +576,41 @@ def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str |
             if not preferred_for_pmm:
                 return f"{years}+ years specifically in product marketing (screen-out threshold: {direct_pmm_cap})"
 
-    if pure_b2b_required:
+    if pure_b2b_required or rules.get("exclude_mandatory_b2b_or_saas_experience", False):
+        domain_patterns = [b2b_pattern]
+        if rules.get("exclude_mandatory_b2b_or_saas_experience", False):
+            domain_patterns.append(
+                re.compile(r"\b(?:saas|software as a service|logiciel en tant que service)\b")
+            )
         for sentence in re.split(r"[.;!?\n]+", normalized):
-            if any(signal in sentence for signal in preferred_signals):
-                continue
-            if not b2b_pattern.search(sentence) or mixed_b2b_pattern.search(sentence):
-                continue
-            if any(signal in sentence for signal in required_signals):
-                return "explicit pure B2B experience requirement"
+            required_positions = [
+                match.start()
+                for signal in required_signals
+                if signal
+                for match in re.finditer(re.escape(signal), sentence)
+            ]
+            preferred_positions = [
+                match.start()
+                for signal in preferred_signals
+                if signal
+                for match in re.finditer(re.escape(signal), sentence)
+            ]
+            for domain_pattern in domain_patterns:
+                for domain_match in domain_pattern.finditer(sentence):
+                    # A specific preferred/ideal signal only softens the nearby
+                    # B2B/SaaS criterion; it cannot cancel a closer mandatory cue.
+                    required_distance = min(
+                        (abs(position - domain_match.start()) for position in required_positions),
+                        default=10_000,
+                    )
+                    preferred_distance = min(
+                        (abs(position - domain_match.start()) for position in preferred_positions),
+                        default=10_000,
+                    )
+                    if required_distance <= 65 and required_distance < preferred_distance:
+                        if domain_pattern is b2b_pattern and pure_b2b_required:
+                            return "explicit mandatory B2B experience requirement"
+                        return "explicit mandatory SaaS experience requirement"
     return None
 
 
@@ -661,6 +688,7 @@ def seniority_adjustment(job: dict[str, Any], config: dict[str, Any]) -> float:
         r"(?:years?|yrs?|ans?|annees?)\b"
     )
     direct_pmm_5plus = False
+    pmm_years_in_sweet_spot = False
     similar_pmm_1_2 = False
     threshold = int(soft.get("direct_pmm_years_threshold", 5))
     desired_max = int(soft.get("desired_similar_role_years_max", 2))
@@ -672,8 +700,7 @@ def seniority_adjustment(job: dict[str, Any], config: dict[str, Any]) -> float:
         right = min(right_candidates) if right_candidates else len(description)
         sentence = description[left:right]
         near = description[max(left, match.start() - 35) : min(right, match.end() + 45)]
-        if any(signal and signal in near for signal in preferred):
-            continue
+        is_preferred_requirement = any(signal and signal in near for signal in preferred)
 
         years = int(match.group("years"))
         has_pmm_context = any(signal in sentence for signal in pmm_signals)
@@ -682,10 +709,17 @@ def seniority_adjustment(job: dict[str, Any], config: dict[str, Any]) -> float:
         if not has_pmm_context:
             continue
 
+        # Preferred high-tenure requirements should not be treated as mandatory;
+        # preferred 1–2 year PMM experience can still signal a strong fit.
+        if is_preferred_requirement and years > desired_max:
+            continue
+
         if years >= threshold:
             direct_pmm_5plus = True
-        elif years <= desired_max and any(signal in sentence for signal in similar_signals):
-            similar_pmm_1_2 = True
+        elif years <= desired_max:
+            pmm_years_in_sweet_spot = True
+            if any(signal in sentence for signal in similar_signals):
+                similar_pmm_1_2 = True
 
     penalty = 0.0
     if direct_pmm_5plus:
@@ -702,6 +736,8 @@ def seniority_adjustment(job: dict[str, Any], config: dict[str, Any]) -> float:
     penalty = min(penalty, float(soft.get("max_penalty", 1.8)))
     if penalty:
         return -penalty
+    if pmm_years_in_sweet_spot:
+        return float(soft.get("direct_pmm_years_bonus", 0.5))
     if similar_pmm_1_2:
         return float(soft.get("similar_role_years_bonus", 0.25))
     return 0.0
