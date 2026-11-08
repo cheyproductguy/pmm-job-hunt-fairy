@@ -416,6 +416,7 @@ negative_title_keywords:
   - director
   - directeur
   - directrice
+  - principal
   - head of
   - vp
   - vice president
@@ -488,12 +489,19 @@ search:
   log_rejected_titles: true
 
 # Favor early-to-mid PMM scope while protecting transferable marketing experience.
-# Hard screen: explicit pure-B2B requirements and 8+ years overall. Soft screen:
-# 5+ years specifically in PMM is down-ranked; senior titles only receive an
-# extra caution when paired with first/sole-PMM or build-from-scratch scope.
+# Hard screen: principal titles, 5+ years specifically in PMM, explicit pure-B2B
+# requirements, and 8+ years overall. Marketing experience outside PMM remains
+# transferable and is not subject to the PMM-specific cap.
 seniority_filters:
   screen_out_minimums_at_or_above:
     overall_years: 8
+    direct_pmm_years: 5
+  direct_pmm_signals:
+    - product marketing
+    - pmm
+    - marketing produit
+    - responsable marketing produit
+    - chef de produit marketing
   soft_downrank:
     direct_pmm_years_threshold: 5
     direct_pmm_years_penalty: 0.8

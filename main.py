@@ -448,6 +448,10 @@ def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str |
         r"\b(?:nous|notre|nos|we|our|depuis|since|founded|fondee?|leader|history|histoire)\b"
     )
     preferred_signals = [normalize(item) for item in rules.get("preferred_signals", [])]
+    direct_pmm_signals = [
+        normalize(item) for item in rules.get("direct_pmm_signals", [])
+    ]
+    direct_pmm_cap = int(caps.get("direct_pmm_years", 0))
     preferred_before = int(rules.get("preferred_window_chars_before", 25))
     preferred_after = int(rules.get("preferred_window_chars_after", 30))
     b2b_term = r"(?:b\s*(?:2|to)\s*b|bto[b]|business[- ]to[- ]business)"
@@ -488,6 +492,38 @@ def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str |
                 + " "
                 + normalized[match.end() : match.end() + preferred_after]
             )
+
+            # A high minimum tied specifically to PMM is a hard scope mismatch.
+            # Do not confuse an overall marketing tenure requirement with PMM
+            # tenure, and do not let "ideally B2B" soften a mandatory PMM minimum.
+            pmm_positions = [
+                (sentence.find(signal), sentence.find(signal) + len(signal))
+                for signal in direct_pmm_signals
+                if signal and sentence.find(signal) >= 0
+            ]
+            pmm_positions = [(start, end) for start, end in pmm_positions]
+            if direct_pmm_cap and years >= direct_pmm_cap and pmm_positions:
+                preferred_positions = [
+                    sentence.find(signal)
+                    for signal in preferred_signals
+                    if signal and sentence.find(signal) >= 0
+                ]
+                explicit_pmm_preference = any(
+                    0 <= match.start() - left_edge - position <= 45
+                    for position in preferred_positions
+                )
+                if not explicit_pmm_preference:
+                    for _, pmm_end in pmm_positions:
+                        after_pmm = sentence[pmm_end : pmm_end + 24]
+                        if (
+                            any(signal in after_pmm for signal in preferred_signals)
+                            and not re.search(r"\b(?:b2b|b2c|b2b2c|btob|business to business)\b", sentence)
+                        ):
+                            explicit_pmm_preference = True
+                            break
+                if not explicit_pmm_preference:
+                    return f"{years}+ years specifically in product marketing (screen-out threshold: {direct_pmm_cap})"
+
             if any(signal in near for signal in preferred_signals):
                 continue
 
@@ -501,6 +537,44 @@ def excessive_experience_requirement(text: str, config: dict[str, Any]) -> str |
             cap = int(caps.get("overall_years", 0))
             if cap and years >= cap:
                 return f"{years}+ years required overall (screen-out threshold: {cap})"
+
+    # Also catch plain wording such as "5 years in product marketing" that
+    # contains no plus sign, range, or explicit "experience" phrase.
+    direct_year_pattern = re.compile(
+        rf"\b(?P<years>\d{{1,2}})(?:\s*(?:\+|[-–—]|to|a|and|et)\s*\d{{1,2}})?\s*{year_units}\b"
+    )
+    for sentence in re.split(r"[.;!?\n]+", normalized):
+        pmm_positions = [
+            (sentence.find(signal), sentence.find(signal) + len(signal))
+            for signal in direct_pmm_signals
+            if signal and sentence.find(signal) >= 0
+        ]
+        if not pmm_positions:
+            continue
+        for match in direct_year_pattern.finditer(sentence):
+            years = int(match.group("years"))
+            if not direct_pmm_cap or years < direct_pmm_cap:
+                continue
+            preferred_positions = [
+                sentence.find(signal)
+                for signal in preferred_signals
+                if signal and sentence.find(signal) >= 0
+            ]
+            preferred_for_pmm = any(
+                0 <= match.start() - position <= 45
+                for position in preferred_positions
+            )
+            if not preferred_for_pmm:
+                for _, pmm_end in pmm_positions:
+                    after_pmm = sentence[pmm_end : pmm_end + 24]
+                    if (
+                        any(signal in after_pmm for signal in preferred_signals)
+                        and not re.search(r"\b(?:b2b|b2c|b2b2c|btob|business to business)\b", sentence)
+                    ):
+                        preferred_for_pmm = True
+                        break
+            if not preferred_for_pmm:
+                return f"{years}+ years specifically in product marketing (screen-out threshold: {direct_pmm_cap})"
 
     if pure_b2b_required:
         for sentence in re.split(r"[.;!?\n]+", normalized):
@@ -750,6 +824,25 @@ def safe_url(value: str) -> str:
     return value if parsed.scheme in {"http", "https"} and parsed.netloc else "#"
 
 
+def role_lane(job: dict[str, Any]) -> str:
+    """Place clear PMM roles in their own digest section; keep adjacent roles visible."""
+    title = normalize(str(job.get("title", "")))
+    description = normalize(str(job.get("description", "")))
+    direct_title_signals = (
+        "product marketing", "pmm", "marketing produit",
+        "responsable marketing produit", "chef de produit marketing",
+    )
+    if any(signal in title for signal in direct_title_signals):
+        return "product_marketing"
+    has_pmm_function = any(signal in description for signal in direct_title_signals)
+    has_pmm_work = any(
+        signal in description
+        for signal in ("positioning", "positionnement", "product messaging", "messaging produit",
+                       "value proposition", "proposition de valeur", "go-to-market", "lancement produit")
+    )
+    return "product_marketing" if has_pmm_function and has_pmm_work else "marketing_management"
+
+
 def load_cv() -> str:
     """Load the bilingual profile used for optional AI match rationales."""
     try:
@@ -803,9 +896,14 @@ def format_email(
         "scouting beyond the usual titles for roles that fit your experience and career-quest "
         "criteria. Here are today's best matches—may one lead to your next great adventure."
     )
-    rows = []
-    plain_rows = []
+    sections = (
+        ("product_marketing", "PMM & Product Marketing", "Roles where product marketing is the core function"),
+        ("marketing_management", "Marketing Management & Adjacent Roles", "Campaign, growth, channel, retail, events, insights, and broader marketing roles"),
+    )
+    rows_by_lane: dict[str, list[str]] = {key: [] for key, _, _ in sections}
+    plain_by_lane: dict[str, list[str]] = {key: [] for key, _, _ in sections}
     for job in jobs:
+        lane = str(job.get("role_lane") or role_lane(job))
         title = str(job.get("title", "Untitled role"))
         company = str(job.get("company", {}).get("display_name", "Company not listed"))
         location = str(job.get("location", {}).get("display_name", "Location not listed"))
@@ -819,7 +917,7 @@ def format_email(
             if rationale
             else ""
         )
-        rows.append(
+        rows_by_lane[lane].append(
             "<tr><td style='padding:12px;border-bottom:1px solid #e5e7eb'>"
             f"<a href='{html.escape(link, quote=True)}' style='font-weight:600;color:#155eef'>"
             f"{html.escape(title)}</a><br><span style='color:#667085'>{html.escape(company)}</span>"
@@ -829,7 +927,7 @@ def format_email(
             f"<td style='padding:12px;border-bottom:1px solid #e5e7eb'>{html.escape(posted)}</td>"
             f"<td style='padding:12px;border-bottom:1px solid #e5e7eb;text-align:center'>{score}/10</td></tr>"
         )
-        plain_rows.append(
+        plain_by_lane[lane].append(
             f"{title} | {company} | {sector} | {score}/10 | {location} | Posted {posted}\nApply: {link}"
             + (f"\nWhy it may fit: {rationale}" if rationale else "")
         )
@@ -838,6 +936,30 @@ def format_email(
         if test_mode
         else ""
     )
+    html_sections = []
+    plain_sections = []
+    for lane, heading, description in sections:
+        lane_rows = rows_by_lane[lane]
+        lane_plain = plain_by_lane[lane]
+        html_sections.append(
+            f"<h3 style='margin:24px 0 4px;color:#344054'>{html.escape(heading)} ({len(lane_rows)})</h3>"
+            f"<p style='margin:0 0 8px;color:#667085'>{html.escape(description)}</p>"
+            + (
+                "<table style='border-collapse:collapse;width:100%'><thead><tr>"
+                + "<th align='left' style='padding:12px'>Role and company</th>"
+                + "<th align='left' style='padding:12px'>Industry / category</th>"
+                + "<th align='left' style='padding:12px'>Location</th>"
+                + "<th align='left' style='padding:12px'>Posted</th>"
+                + "<th style='padding:12px'>Fit</th></tr></thead><tbody>"
+                + "".join(lane_rows)
+                + "</tbody></table>"
+                if lane_rows else "<p style='color:#667085'>No matches in this lane today.</p>"
+            )
+        )
+        plain_sections.append(
+            f"{heading} ({len(lane_plain)})\n{description}\n\n"
+            + ("\n\n".join(lane_plain) if lane_plain else "No matches in this lane today.")
+        )
     html_body = (
         "<html><body style='font-family:Arial,sans-serif;color:#101828;max-width:900px;margin:auto'>"
         f"<div style='display:none;max-height:0;overflow:hidden;opacity:0;color:transparent'>{html.escape(preview_text)}</div>"
@@ -845,20 +967,14 @@ def format_email(
         f"<p>{html.escape(date_label)}</p>"
         + test_banner
         + f"<p>{html.escape(encouragement)}</p>"
-        + f"<p>Your top {len(jobs)} eligible role(s), sorted by fit score:</p>"
-        + "<table style='border-collapse:collapse;width:100%'><thead><tr>"
-        + "<th align='left' style='padding:12px'>Role and company</th>"
-        + "<th align='left' style='padding:12px'>Industry / category</th>"
-        + "<th align='left' style='padding:12px'>Location</th>"
-        + "<th align='left' style='padding:12px'>Posted</th>"
-        + "<th style='padding:12px'>Fit</th></tr></thead><tbody>"
-        + "".join(rows)
-        + "</tbody></table></body></html>"
+        + f"<p>Your top {len(jobs)} eligible role(s), sorted by fit score within each lane:</p>"
+        + "".join(html_sections)
+        + "</body></html>"
     )
     plain = (
         f"{preview_text}\n\n{first_name}'s PMM Job Hunt Fairy — {date_label}\n\n"
-        f"{encouragement}\n\nYour top {len(jobs)} eligible role(s), sorted by fit score:\n\n"
-        + "\n\n".join(plain_rows)
+        f"{encouragement}\n\nYour top {len(jobs)} eligible role(s), sorted by fit score within each lane:\n\n"
+        + "\n\n".join(plain_sections)
     )
     return plain, html_body
 
@@ -904,6 +1020,8 @@ def main() -> int:
         return 0
     max_email_results = max(1, int(config.get("search", {}).get("max_email_results", 8)))
     email_jobs = matches[:max_email_results]
+    for job in email_jobs:
+        job["role_lane"] = role_lane(job)
     if len(matches) > max_email_results:
         LOG.info("Limiting digest to the top %d of %d matching roles", max_email_results, len(matches))
     if os.getenv("OPENAI_API_KEY"):
