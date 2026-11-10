@@ -5,7 +5,6 @@ target_titles:
   - Product Marketing Specialist
   - Go-to-Market Manager
   - GTM Manager
-  - Growth Marketing Manager
   - Customer Marketing Manager
   - Market Insights Manager
   - Customer Insights Manager
@@ -16,6 +15,7 @@ target_titles:
   - Regional Marketing Manager
   - International Marketing Manager
   - Campaign Marketing Manager
+  - Campaign Strategy Manager
   - Event Marketing Manager
   - Channel Marketing Manager
   - Channel Marketing Specialist
@@ -39,6 +39,7 @@ target_titles:
   - Responsable insights clients
   - Responsable développement de l'offre
   - Responsable marketing événementiel
+  - Responsable stratégie de campagne
   - Responsable marketing retail
   - Responsable marketing partenaires
   - Responsable marketing des courtiers
@@ -53,12 +54,13 @@ target_titles:
 search_terms:
   - product marketing
   - marketing produit
-  - growth marketing
   - go-to-market
   - campaign marketing
+  - campaign strategy
   - event marketing
   - marketing événementiel
   - channel marketing
+  - growth marketing
 
 partner_channel_search_terms:
   - partner marketing
@@ -485,6 +487,18 @@ negative_title_keywords:
   - marketing operations
   - product manager
   - product owner
+  - cofounder
+  - co-founder
+  - co founder
+  - co-fondateur
+  - co-fondatrice
+  - founder
+  - fondateur
+  - fondatrice
+  - cofondateur
+  - cofondatrice
+  - associé fondateur
+  - associée fondatrice
 
 notification_email: chey.jobbot@gmail.com
 user_name: Cheyguy
@@ -507,6 +521,65 @@ search:
   max_email_results_per_lane: 5
   # Log every job dropped by the title filter. Review for a week, then set to false.
   log_rejected_titles: true
+
+# Keep CRM/lifecycle roles only when they have a meaningful GTM or product-launch scope.
+role_fit_filters:
+  crm_lifecycle_title_signals:
+    - CRM manager
+    - CRM marketing manager
+    - lifecycle manager
+    - lifecycle marketing manager
+    - responsable CRM
+    - responsable lifecycle
+    - responsable marketing cycle de vie
+  crm_lifecycle_gtm_signals:
+    - go-to-market
+    - go to market
+    - GTM
+    - product launch
+    - launch strategy
+    - product positioning
+    - value proposition
+    - lancement produit
+    - stratégie de lancement
+    - positionnement produit
+    - proposition de valeur
+
+# Campaign strategy and agency leadership fit; hands-on paid media setup is a weaker fit.
+role_fit_adjustments:
+  hands_on_paid_execution_penalty: 1.0
+  paid_channel_signals:
+    - paid search
+    - SEA
+    - PPC
+    - paid social
+    - display advertising
+    - Google Ads
+    - Meta Ads
+    - programmatic advertising
+    - référencement payant
+    - publicité display
+    - publicité sur les réseaux sociaux
+  direct_execution_signals:
+    - hands-on paid media execution
+    - hands-on execution of paid campaigns
+    - hands-on campaign execution
+    - hands-on campaign management
+    - directly manage paid campaigns
+    - set up and optimize paid campaigns
+    - campaign setup and optimization
+    - campaign set-up and optimization
+    - personally build paid campaigns
+    - hands-on Google Ads
+    - hands-on Meta Ads
+    - manage Google Ads in-house
+    - operational ownership of paid media
+    - paramétrer les campagnes SEA
+    - mise en place de campagnes SEA
+    - mise en place de campagnes paid
+    - gestion opérationnelle des campagnes Google Ads
+    - exécution de campagnes paid social
+    - pilotage opérationnel des campagnes SEA
 
 # Favor early-to-mid PMM scope while protecting transferable marketing experience.
 # Hard screen: principal titles, 5+ years specifically in PMM, explicit pure-B2B

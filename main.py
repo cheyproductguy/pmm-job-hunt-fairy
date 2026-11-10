@@ -815,6 +815,13 @@ def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[
             total += float(recency_rules.get("within_2_days", 0.5))
         elif age_days <= 7:
             total += float(recency_rules.get("within_7_days", 0.2))
+    role_fit = config.get("role_fit_adjustments", {})
+    if (
+        role_lane(job) == "marketing_management"
+        and contains_any(text, role_fit.get("paid_channel_signals", []))
+        and contains_any(text, role_fit.get("direct_execution_signals", []))
+    ):
+        total -= float(role_fit.get("hands_on_paid_execution_penalty", 1.0))
     partner_bonus = config.get("scoring", {}).get("partner_channel_bonus", {})
     bonus_matches: list[str] = []
     if role_lane(job) == "partner_channel_marketing":
@@ -854,6 +861,10 @@ def filter_and_score(
         if bad_keyword:
             if log_titles:
                 LOG.info("Title excluded '%s' (matched '%s')", job.get("title", ""), bad_keyword)
+            continue
+        scope_reason = role_scope_exclusion(job, config)
+        if scope_reason:
+            LOG.info("Excluded '%s': %s", job.get("title", "Untitled role"), scope_reason)
             continue
         if (
             not is_recent(job, max_age)
@@ -930,6 +941,20 @@ def role_lane(job: dict[str, Any]) -> str:
                        "value proposition", "proposition de valeur", "go-to-market", "lancement produit")
     )
     return "product_marketing" if has_pmm_function and has_pmm_work else "marketing_management"
+
+
+def role_scope_exclusion(job: dict[str, Any], config: dict[str, Any]) -> str | None:
+    """Exclude full-time CRM/lifecycle roles unless they include meaningful GTM scope."""
+    rules = config.get("role_fit_filters", {})
+    title = normalize(str(job.get("title", "")))
+    if not any(
+        normalize(signal) in title
+        for signal in rules.get("crm_lifecycle_title_signals", [])
+    ):
+        return None
+    if contains_any(job_text(job), rules.get("crm_lifecycle_gtm_signals", [])):
+        return None
+    return "CRM/lifecycle role without a clear GTM or product-launch component"
 
 
 def load_cv() -> str:
