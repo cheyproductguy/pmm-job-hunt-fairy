@@ -2,7 +2,7 @@
 
 Tired of trekking daily across **dozens of job boards and email alerts**? Limited job board filters and mismatched listing titles can leave your next great PMM role hiding in plain sight.
 
-**Send your PMM Job Hunt Fairy to find up to 10 roles matched to your PMM magic and career quest each morning.**
+**Send your PMM Job Hunt Fairy to find up to 5 roles in each of three lanes—PMM, Partner & Channel Marketing, and Marketing Management—each morning.**
 
 Spend less time searching and more time applying for your dream job—with your magical career-quest companion by your side.
 
@@ -10,7 +10,7 @@ Built for PMM, where great-fit roles often hide behind unexpected titles. Lookin
 
 ## How it works
 
-- Scouts Adzuna in English and French for PMM and adjacent roles—even when the title is unexpected—using both titles and job functions like campaigns, events, channels, and retail marketing.
+- Scouts Adzuna in English and French for PMM, partner/channel, and adjacent marketing roles—even when the title is unexpected—using both titles and job functions like campaigns, events, and retail marketing.
 - Matches listings to your CV, transferable strengths, consumer/partner business models, target industries, and work preferences, then ranks the best fits.
 - Recognizes growth, lifecycle, campaign development, retail, event, channel enablement, and agency-management experience in English and French.
 - Gives recently posted roles a small nudge up the list.

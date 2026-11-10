@@ -18,7 +18,15 @@ target_titles:
   - Campaign Marketing Manager
   - Event Marketing Manager
   - Channel Marketing Manager
+  - Channel Marketing Specialist
   - Partner Marketing Manager
+  - Partner Marketing Specialist
+  - Broker Marketing Manager
+  - Broker Channel Marketing Manager
+  - Alliance Marketing Manager
+  - Trade Marketing Manager
+  - Trade Marketing Specialist
+  - Retail Merchandising Manager
   - Retail Marketing Manager
   - Field Marketing Manager
   - Chef de produit
@@ -33,6 +41,10 @@ target_titles:
   - Responsable marketing événementiel
   - Responsable marketing retail
   - Responsable marketing partenaires
+  - Responsable marketing des courtiers
+  - Responsable marketing de canal
+  - Responsable marketing réseau
+  - Responsable trade marketing
   - Chef de projet marketing
   - Chef de marché
 
@@ -47,6 +59,12 @@ search_terms:
   - event marketing
   - marketing événementiel
   - channel marketing
+
+partner_channel_search_terms:
+  - partner marketing
+  - channel marketing
+  - broker marketing
+  - marketing partenaires
 
 business_model_search_terms:
   - B2C marketing
@@ -452,6 +470,8 @@ negative_title_keywords:
   - graduate programme
   - volontariat
   - v.i.e
+  - V.I.E
+  - volontariat international en entreprise
 
   # Wrong function
   - hardware
@@ -473,18 +493,18 @@ search:
   results_per_query: 40
   pages: 2
   max_queries_per_country: 18
-  # Keep the API request ceiling fixed while adding role-function discovery.
-  # Bilingual function queries complement the title queries below.
-  core_query_slots: 8
+  # Keep the API request ceiling fixed while reserving queries for partner/channel roles.
+  core_query_slots: 6
+  partner_channel_query_slots: 4
   business_model_query_slots: 5
   api_retries: 3
   retry_backoff_seconds: 2
   max_retry_delay_seconds: 30
   max_consecutive_failed_pages: 4
   max_age_days: 30
-  # Keep adjacent and transferable matches in the digest; the email remains capped at 10.
+  # Keep adjacent and transferable matches; show up to five roles in each of three lanes.
   minimum_fit_score: 3.0
-  max_email_results: 10
+  max_email_results_per_lane: 5
   # Log every job dropped by the title filter. Review for a week, then set to false.
   log_rejected_titles: true
 
@@ -670,3 +690,29 @@ scoring:
     b2b2c_and_partner: 0.82
     b2b_transferable: 0.15
     unspecified: 0.4
+  partner_channel_bonus:
+    points_per_match: 0.4
+    max_points: 0.8
+    signals:
+      retail_merchandising:
+        - retail merchandising
+        - merchandising retail
+        - retail merchandiser
+        - in-store merchandising
+        - point of sale merchandising
+        - point-of-sale merchandising
+        - merchandising en magasin
+        - merchandising en point de vente
+        - mise en rayon
+        - animation commerciale en magasin
+      insurance_broker_channel_activation:
+        - insurance broker activation
+        - broker channel activation
+        - insurance broker channel
+        - broker enablement
+        - broker marketing
+        - activation du réseau de courtiers
+        - animation du réseau de courtiers
+        - animation réseau courtiers
+        - activation des courtiers
+        - accompagnement des courtiers

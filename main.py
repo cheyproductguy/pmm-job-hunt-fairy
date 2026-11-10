@@ -256,23 +256,36 @@ def search_adzuna(config: dict[str, Any]) -> list[dict[str, Any]]:
     pages = int(search_cfg.get("pages", 2))
     max_queries = int(search_cfg.get("max_queries_per_country", 18))
     core_terms = unique_terms([str(term) for term in config.get("search_terms", [])])
+    partner_channel_terms = unique_terms(
+        [str(term) for term in config.get("partner_channel_search_terms", [])]
+    )
     model_terms = unique_terms([str(term) for term in config.get("business_model_search_terms", [])])
     title_groups = [list(TITLE_SEARCH_TERMS.get(title, (title,))) for title in titles]
     core_slots = min(max(0, int(search_cfg.get("core_query_slots", 6))), max_queries)
-    model_slots = min(
-        max(0, int(search_cfg.get("business_model_query_slots", 7))),
+    partner_channel_slots = min(
+        max(0, int(search_cfg.get("partner_channel_query_slots", 0))),
         max_queries - core_slots,
     )
-    title_slots = max_queries - core_slots - model_slots
+    model_slots = min(
+        max(0, int(search_cfg.get("business_model_query_slots", 7))),
+        max_queries - core_slots - partner_channel_slots,
+    )
+    title_slots = max_queries - core_slots - partner_channel_slots - model_slots
     terms = unique_terms(
         core_terms[:core_slots]
+        + partner_channel_terms[:partner_channel_slots]
         + model_terms[:model_slots]
         + spread_title_terms(title_groups, title_slots)
     )
     # Backfill any slots freed by duplicates, keeping the request ceiling fixed.
     remaining_title_terms = [term for group in title_groups for term in group]
     seen_terms = {normalize(term) for term in terms}
-    for term in core_terms[core_slots:] + model_terms[model_slots:] + remaining_title_terms:
+    for term in (
+        core_terms[core_slots:]
+        + partner_channel_terms[partner_channel_slots:]
+        + model_terms[model_slots:]
+        + remaining_title_terms
+    ):
         key = normalize(term)
         if len(terms) >= max_queries:
             break
@@ -802,8 +815,25 @@ def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[
             total += float(recency_rules.get("within_2_days", 0.5))
         elif age_days <= 7:
             total += float(recency_rules.get("within_7_days", 0.2))
+    partner_bonus = config.get("scoring", {}).get("partner_channel_bonus", {})
+    bonus_matches: list[str] = []
+    if role_lane(job) == "partner_channel_marketing":
+        bonus_signals = partner_bonus.get("signals", {})
+        bonus_matches = [
+            name for name, phrases in bonus_signals.items()
+            if contains_any(raw_text, phrases)
+        ]
+        bonus_points = min(
+            float(partner_bonus.get("points_per_match", 0.4)) * len(bonus_matches),
+            float(partner_bonus.get("max_points", 0.8)),
+        )
+        total += bonus_points
     total = min(10.0, max(0.0, total + seniority_adjustment(job, config)))
-    matched = matched_competencies + [f"industry:{item}" for item in matched_industry_names]
+    matched = (
+        matched_competencies
+        + [f"industry:{item}" for item in matched_industry_names]
+        + [f"bonus:{name}" for name in bonus_matches]
+    )
     return round(total, 1), matched
 
 
@@ -861,9 +891,32 @@ def safe_url(value: str) -> str:
 
 
 def role_lane(job: dict[str, Any]) -> str:
-    """Place clear PMM roles in their own digest section; keep adjacent roles visible."""
+    """Place role families into distinct, non-overlapping digest lanes."""
     title = normalize(str(job.get("title", "")))
     description = normalize(str(job.get("description", "")))
+    partner_channel_signals = (
+        "partner marketing", "channel marketing", "alliance marketing",
+        "broker marketing", "broker channel marketing", "trade marketing",
+        "retail merchandising", "marketing partenaires", "marketing des courtiers",
+        "marketing de canal", "marketing reseau", "marketing de distribution",
+    )
+    if any(signal in title for signal in partner_channel_signals):
+        return "partner_channel_marketing"
+    has_partner_channel_function = any(
+        signal in description for signal in partner_channel_signals
+    )
+    has_channel_work = any(
+        signal in description
+        for signal in (
+            "partner enablement", "channel enablement", "broker activation",
+            "broker enablement", "retail merchandising", "trade marketing",
+            "partner campaigns", "channel campaigns", "marketing partenaires",
+            "animation du reseau de courtiers", "merchandising en magasin",
+        )
+    )
+    if has_partner_channel_function and has_channel_work:
+        return "partner_channel_marketing"
+
     direct_title_signals = (
         "product marketing", "pmm", "marketing produit",
         "responsable marketing produit", "chef de produit marketing",
@@ -934,7 +987,8 @@ def format_email(
     )
     sections = (
         ("product_marketing", "PMM & Product Marketing", "Roles where product marketing is the core function"),
-        ("marketing_management", "Marketing Management & Adjacent Roles", "Campaign, growth, channel, retail, events, insights, and broader marketing roles"),
+        ("partner_channel_marketing", "Partner & Channel Marketing", "Partner, broker, channel, trade, and retail merchandising roles"),
+        ("marketing_management", "Marketing Management & Adjacent Roles", "Campaign, growth, retail, events, insights, and broader marketing roles"),
     )
     rows_by_lane: dict[str, list[str]] = {key: [] for key, _, _ in sections}
     plain_by_lane: dict[str, list[str]] = {key: [] for key, _, _ in sections}
@@ -1054,12 +1108,28 @@ def main() -> int:
     if not matches and not test_mode:
         LOG.info("No listings passed the configured filters")
         return 0
-    max_email_results = max(1, int(config.get("search", {}).get("max_email_results", 8)))
-    email_jobs = matches[:max_email_results]
-    for job in email_jobs:
-        job["role_lane"] = role_lane(job)
-    if len(matches) > max_email_results:
-        LOG.info("Limiting digest to the top %d of %d matching roles", max_email_results, len(matches))
+    per_lane_limit = max(1, int(config.get("search", {}).get("max_email_results_per_lane", 5)))
+    lane_counts = {
+        "product_marketing": 0,
+        "partner_channel_marketing": 0,
+        "marketing_management": 0,
+    }
+    email_jobs = []
+    for job in matches:
+        lane = role_lane(job)
+        if lane_counts.get(lane, 0) >= per_lane_limit:
+            continue
+        job["role_lane"] = lane
+        email_jobs.append(job)
+        lane_counts[lane] = lane_counts.get(lane, 0) + 1
+    max_email_results = per_lane_limit * len(lane_counts)
+    if len(matches) > len(email_jobs):
+        LOG.info(
+            "Selected up to %d roles per lane (%d total) from %d matching roles",
+            per_lane_limit,
+            max_email_results,
+            len(matches),
+        )
     if os.getenv("OPENAI_API_KEY"):
         cv_text = load_cv()
         for job in email_jobs:

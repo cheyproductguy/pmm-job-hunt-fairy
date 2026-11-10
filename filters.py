@@ -35,6 +35,10 @@ def compile_title_patterns(keywords: list[str]) -> list[tuple[str, re.Pattern[st
 
 def matching_title_keyword(title: str, patterns: list[tuple[str, re.Pattern[str]]]) -> str | None:
     """Return the first negative keyword found in the title as a whole word, else None."""
+    # Preserve uppercase acronym casing so VIE internships are excluded without
+    # rejecting the ordinary French word "vie" in unrelated job titles.
+    if re.search(r"(?<![A-Za-z0-9])VIE(?![A-Za-z0-9])", title):
+        return "VIE"
     text = TITLE_EXCEPTIONS.sub(" ", normalize(title))
     for keyword, pattern in patterns:
         if pattern.search(text):
