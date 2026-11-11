@@ -716,6 +716,60 @@ degree_filters:
 # Profiles are relative weights; the app normalizes every result to /10.
 scoring:
   active_profile: balanced
+  # These are target customer markets, not job locations. Listings are still
+  # fetched only from France and Switzerland.
+  english_market_scope_bonus:
+    points: 0.4
+    target_market_signals:
+      - US market
+      - U.S. market
+      - USA market
+      - United States market
+      - market in the US
+      - market in the United States
+      - US launch
+      - USA launch
+      - North American market
+      - North America
+      - Canadian market
+      - Canada market
+      - market in Canada
+      - Canadian customers
+      - Canadian consumers
+      - UK market
+      - U.K. market
+      - British market
+      - United Kingdom market
+      - market in the UK
+      - UK launch
+      - marché américain
+      - marché nord-américain
+      - Amérique du Nord
+      - marché canadien
+      - marché britannique
+      - Royaume-Uni
+    campaign_scope_signals:
+      - campaign strategy
+      - campaign planning
+      - campaign development
+      - marketing campaign
+      - go-to-market
+      - go to market
+      - GTM strategy
+      - product launch
+      - launch strategy
+      - regional marketing strategy
+      - regional campaigns
+      - localized campaigns
+      - marketing mix
+      - stratégie de campagne
+      - planification de campagnes
+      - développement de campagnes
+      - lancement produit
+      - stratégie de lancement
+      - stratégie marketing régionale
+      - campagnes régionales
+      - mix marketing
   profiles:
     balanced:
       direct_experience: 3.25

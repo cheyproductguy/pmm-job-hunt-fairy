@@ -815,6 +815,16 @@ def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[
             total += float(recency_rules.get("within_2_days", 0.5))
         elif age_days <= 7:
             total += float(recency_rules.get("within_7_days", 0.2))
+    market_scope_rules = config.get("scoring", {}).get("english_market_scope_bonus", {})
+    has_target_english_market = contains_any(
+        text, market_scope_rules.get("target_market_signals", [])
+    )
+    has_campaign_scope = contains_any(
+        text, market_scope_rules.get("campaign_scope_signals", [])
+    )
+    english_market_bonus = has_target_english_market and has_campaign_scope
+    if english_market_bonus:
+        total += float(market_scope_rules.get("points", 0.4))
     role_fit = config.get("role_fit_adjustments", {})
     if (
         role_lane(job) == "marketing_management"
@@ -840,6 +850,7 @@ def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[
         matched_competencies
         + [f"industry:{item}" for item in matched_industry_names]
         + [f"bonus:{name}" for name in bonus_matches]
+        + (["bonus:english_speaking_target_market"] if english_market_bonus else [])
     )
     return round(total, 1), matched
 
