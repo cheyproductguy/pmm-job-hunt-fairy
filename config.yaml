@@ -21,6 +21,22 @@ target_titles:
   - Channel Marketing Specialist
   - Partner Marketing Manager
   - Partner Marketing Specialist
+  - Retail Partnerships Manager
+  - Retail Activation Manager
+  - In-Store Marketing Manager
+  - Visual Merchandising Manager
+  - POS Marketing Manager
+  - Retail Promotions Manager
+  - Retail Network Marketing Manager
+  - Omnichannel Marketing Manager
+  - Digital Retail Marketing Manager
+  - Experiential Marketing Manager
+  - Brand Partnerships Manager
+  - Store Enablement Manager
+  - Partner Enablement Manager
+  - Channel Enablement Manager
+  - Retail Network Manager
+  - E-commerce Partnerships Manager
   - Broker Marketing Manager
   - Broker Channel Marketing Manager
   - Alliance Marketing Manager
@@ -41,6 +57,10 @@ target_titles:
   - Responsable marketing événementiel
   - Responsable stratégie de campagne
   - Responsable marketing retail
+  - Responsable activation retail
+  - Responsable marketing en magasin
+  - Responsable merchandising
+  - Responsable marketing omnicanal
   - Responsable marketing partenaires
   - Responsable marketing des courtiers
   - Responsable marketing de canal
@@ -55,8 +75,8 @@ search_terms:
   - product marketing
   - marketing produit
   - go-to-market
-  - campaign marketing
   - campaign strategy
+  - campaign marketing
   - event marketing
   - marketing événementiel
   - channel marketing
@@ -65,15 +85,20 @@ search_terms:
 partner_channel_search_terms:
   - partner marketing
   - channel marketing
-  - broker marketing
+  - trade marketing
   - marketing partenaires
+
+retail_marketing_search_terms:
+  - retail marketing
+  - marketing retail
+  - visual merchandising
 
 business_model_search_terms:
   - B2C marketing
   - D2C marketing
-  - consumer product marketing
-  - marketing grand public
   - B2B2C product marketing
+  - marketing grand public
+  - consumer product marketing
 
 core_competencies:
   role_scope:
@@ -248,6 +273,88 @@ core_competencies:
     - gestion de projet
     - reporting de campagne
     - suivi des performances
+  retail_partner_and_omnichannel:
+    - retail marketing
+    - trade marketing
+    - retail partnerships
+    - partner marketing
+    - channel marketing
+    - retail activations
+    - in-store marketing
+    - visual merchandising
+    - POS marketing
+    - point-of-sale marketing
+    - retail promotions
+    - consumer engagement
+    - co-marketing
+    - brand partnerships
+    - field marketing
+    - store enablement
+    - retail network management
+    - partner enablement
+    - store staff training
+    - experiential marketing
+    - promotional events
+    - trade shows
+    - event marketing
+    - omnichannel marketing
+    - integrated campaign management
+    - localized marketing
+    - seasonal campaigns
+    - campaign strategy
+    - campaign execution
+    - creative briefing
+    - agency management
+    - vendor coordination
+    - digital retail marketing
+    - e-commerce partnerships
+    - influencer campaign strategy
+    - retail performance reporting
+    - merchandising compliance
+    - partner performance analysis
+    - consumer education
+    - marketing operations
+    - cross-functional project management
+    - marketing retail
+    - partenariats retail
+    - partenariats de distribution
+    - marketing partenaires
+    - marketing de canal
+    - activations retail
+    - activation en magasin
+    - marketing en point de vente
+    - merchandising visuel
+    - marketing PLV
+    - promotions en magasin
+    - engagement des consommateurs
+    - co-marketing
+    - partenariats de marque
+    - marketing terrain
+    - activation des magasins
+    - gestion du réseau de distribution
+    - formation des équipes magasin
+    - marketing expérientiel
+    - événements promotionnels
+    - salons professionnels
+    - marketing événementiel
+    - marketing omnicanal
+    - gestion intégrée de campagnes
+    - marketing localisé
+    - campagnes saisonnières
+    - stratégie de campagne
+    - exécution de campagne
+    - brief créatif
+    - gestion d'agence
+    - coordination des prestataires
+    - marketing digital retail
+    - partenariats e-commerce
+    - stratégie de campagne d'influence
+    - reporting de performance retail
+    - conformité merchandising
+    - analyse de la performance partenaires
+    - éducation des consommateurs
+    - opérations marketing
+    - gestion de projets transverses
 
 business_model_focus:
   consumer_b2c:
@@ -507,18 +614,19 @@ search:
   results_per_query: 40
   pages: 2
   max_queries_per_country: 18
-  # Keep the API request ceiling fixed while reserving queries for partner/channel roles.
-  core_query_slots: 6
+  # Keep the API request ceiling fixed while reserving queries for the four role lanes.
+  core_query_slots: 4
   partner_channel_query_slots: 4
-  business_model_query_slots: 5
+  retail_marketing_query_slots: 3
+  business_model_query_slots: 4
   api_retries: 3
   retry_backoff_seconds: 2
   max_retry_delay_seconds: 30
   max_consecutive_failed_pages: 4
   max_age_days: 30
-  # Keep adjacent and transferable matches; show up to five roles in each of three lanes.
+  # Keep adjacent and transferable matches; show up to three roles in each of four lanes.
   minimum_fit_score: 3.0
-  max_email_results_per_lane: 5
+  max_email_results_per_lane: 3
   # Log every job dropped by the title filter. Review for a week, then set to false.
   log_rejected_titles: true
 

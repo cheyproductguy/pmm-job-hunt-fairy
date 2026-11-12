@@ -259,6 +259,9 @@ def search_adzuna(config: dict[str, Any]) -> list[dict[str, Any]]:
     partner_channel_terms = unique_terms(
         [str(term) for term in config.get("partner_channel_search_terms", [])]
     )
+    retail_marketing_terms = unique_terms(
+        [str(term) for term in config.get("retail_marketing_search_terms", [])]
+    )
     model_terms = unique_terms([str(term) for term in config.get("business_model_search_terms", [])])
     title_groups = [list(TITLE_SEARCH_TERMS.get(title, (title,))) for title in titles]
     core_slots = min(max(0, int(search_cfg.get("core_query_slots", 6))), max_queries)
@@ -266,14 +269,19 @@ def search_adzuna(config: dict[str, Any]) -> list[dict[str, Any]]:
         max(0, int(search_cfg.get("partner_channel_query_slots", 0))),
         max_queries - core_slots,
     )
-    model_slots = min(
-        max(0, int(search_cfg.get("business_model_query_slots", 7))),
+    retail_marketing_slots = min(
+        max(0, int(search_cfg.get("retail_marketing_query_slots", 0))),
         max_queries - core_slots - partner_channel_slots,
     )
-    title_slots = max_queries - core_slots - partner_channel_slots - model_slots
+    model_slots = min(
+        max(0, int(search_cfg.get("business_model_query_slots", 7))),
+        max_queries - core_slots - partner_channel_slots - retail_marketing_slots,
+    )
+    title_slots = max_queries - core_slots - partner_channel_slots - retail_marketing_slots - model_slots
     terms = unique_terms(
         core_terms[:core_slots]
         + partner_channel_terms[:partner_channel_slots]
+        + retail_marketing_terms[:retail_marketing_slots]
         + model_terms[:model_slots]
         + spread_title_terms(title_groups, title_slots)
     )
@@ -283,6 +291,7 @@ def search_adzuna(config: dict[str, Any]) -> list[dict[str, Any]]:
     for term in (
         core_terms[core_slots:]
         + partner_channel_terms[partner_channel_slots:]
+        + retail_marketing_terms[retail_marketing_slots:]
         + model_terms[model_slots:]
         + remaining_title_terms
     ):
@@ -834,7 +843,7 @@ def score_job(job: dict[str, Any], config: dict[str, Any]) -> tuple[float, list[
         total -= float(role_fit.get("hands_on_paid_execution_penalty", 1.0))
     partner_bonus = config.get("scoring", {}).get("partner_channel_bonus", {})
     bonus_matches: list[str] = []
-    if role_lane(job) == "partner_channel_marketing":
+    if role_lane(job) in {"partner_channel_marketing", "retail_marketing"}:
         bonus_signals = partner_bonus.get("signals", {})
         bonus_matches = [
             name for name, phrases in bonus_signals.items()
@@ -916,14 +925,51 @@ def role_lane(job: dict[str, Any]) -> str:
     """Place role families into distinct, non-overlapping digest lanes."""
     title = normalize(str(job.get("title", "")))
     description = normalize(str(job.get("description", "")))
+    pmm_signals = (
+        "product marketing", "pmm", "marketing produit",
+        "responsable marketing produit", "chef de produit marketing",
+    )
+    if any(signal in title for signal in pmm_signals):
+        return "product_marketing"
+    retail_signals = (
+        "retail marketing", "marketing retail", "trade marketing",
+        "retail partnership", "retail activation", "activation retail",
+        "in-store marketing", "visual merchandising", "retail merchandising",
+        "pos marketing", "point-of-sale marketing", "retail promotion",
+        "store enablement", "store staff training", "retail network management",
+        "retail network manager", "omnichannel marketing", "digital retail marketing",
+        "merchandising compliance", "retail performance reporting",
+        "marketing en magasin", "marketing en point de vente", "merchandising visuel",
+        "merchandising en magasin", "marketing plv", "marketing omnicanal",
+        "partenariats retail", "promotions en magasin", "formation des equipes magasin",
+        "reporting de performance retail", "conformite merchandising",
+    )
+    if any(signal in title for signal in retail_signals):
+        return "retail_marketing"
     partner_channel_signals = (
         "partner marketing", "channel marketing", "alliance marketing",
         "broker marketing", "broker channel marketing", "trade marketing",
-        "retail merchandising", "marketing partenaires", "marketing des courtiers",
-        "marketing de canal", "marketing reseau", "marketing de distribution",
+        "brand partnerships", "co-marketing", "partner enablement",
+        "channel enablement", "e-commerce partnerships",
+        "marketing partenaires", "marketing des courtiers", "marketing de canal",
+        "marketing reseau", "marketing de distribution",
     )
     if any(signal in title for signal in partner_channel_signals):
         return "partner_channel_marketing"
+
+    has_pmm_function = any(signal in description for signal in pmm_signals)
+    has_pmm_work = any(
+        signal in description
+        for signal in (
+            "positioning", "positionnement", "product messaging", "messaging produit",
+            "value proposition", "proposition de valeur", "go-to-market", "lancement produit",
+        )
+    )
+    if has_pmm_function and has_pmm_work:
+        return "product_marketing"
+    if any(signal in description for signal in retail_signals):
+        return "retail_marketing"
+
     has_partner_channel_function = any(
         signal in description for signal in partner_channel_signals
     )
@@ -939,19 +985,7 @@ def role_lane(job: dict[str, Any]) -> str:
     if has_partner_channel_function and has_channel_work:
         return "partner_channel_marketing"
 
-    direct_title_signals = (
-        "product marketing", "pmm", "marketing produit",
-        "responsable marketing produit", "chef de produit marketing",
-    )
-    if any(signal in title for signal in direct_title_signals):
-        return "product_marketing"
-    has_pmm_function = any(signal in description for signal in direct_title_signals)
-    has_pmm_work = any(
-        signal in description
-        for signal in ("positioning", "positionnement", "product messaging", "messaging produit",
-                       "value proposition", "proposition de valeur", "go-to-market", "lancement produit")
-    )
-    return "product_marketing" if has_pmm_function and has_pmm_work else "marketing_management"
+    return "marketing_management"
 
 
 def role_scope_exclusion(job: dict[str, Any], config: dict[str, Any]) -> str | None:
@@ -1023,8 +1057,9 @@ def format_email(
     )
     sections = (
         ("product_marketing", "PMM & Product Marketing", "Roles where product marketing is the core function"),
-        ("partner_channel_marketing", "Partner & Channel Marketing", "Partner, broker, channel, trade, and retail merchandising roles"),
-        ("marketing_management", "Marketing Management & Adjacent Roles", "Campaign, growth, retail, events, insights, and broader marketing roles"),
+        ("partner_channel_marketing", "Partner & Channel Marketing", "Partner, broker, channel, and co-marketing roles"),
+        ("marketing_management", "Marketing Management", "Campaign strategy, events, brand, and broader marketing roles"),
+        ("retail_marketing", "Retail Marketing", "Trade, in-store, merchandising, omnichannel, and retail activation roles"),
     )
     rows_by_lane: dict[str, list[str]] = {key: [] for key, _, _ in sections}
     plain_by_lane: dict[str, list[str]] = {key: [] for key, _, _ in sections}
@@ -1149,6 +1184,7 @@ def main() -> int:
         "product_marketing": 0,
         "partner_channel_marketing": 0,
         "marketing_management": 0,
+        "retail_marketing": 0,
     }
     email_jobs = []
     for job in matches:
