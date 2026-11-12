@@ -12,6 +12,7 @@ Built for PMM, where great-fit roles often hide behind unexpected titles. Lookin
 
 - Scouts Adzuna in English and French for PMM, partner/channel, retail, and adjacent marketing roles—even when the title is unexpected—using both titles and job functions like campaigns, events, and merchandising.
 - Matches listings to your CV, transferable strengths, consumer/partner business models, target industries, and work preferences, then ranks the best fits.
+- Labels each role **HIGH**, **MEDIUM**, or **LOW**: HIGH combines strong experience evidence with a domain or mission fit; MEDIUM has strong experience evidence or a promising but less complete match; LOW has limited evidence in the listing. The email shows the evidence so you can make the final call.
 - Recognizes growth, lifecycle, campaign development, retail, event, channel enablement, and agency-management experience in English and French.
 - Gives recently posted roles a small nudge up the list.
 - Emails up to 12 sparkly new-to-you roles each morning, ranked in four role lanes.

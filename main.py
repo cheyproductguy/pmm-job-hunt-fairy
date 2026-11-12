@@ -906,14 +906,31 @@ def filter_and_score(
         score, matched = score_job(job, config)
         if score < minimum:
             continue
+        tier = assess_match_tier(job, config)
         job["fit_score"] = score
         job["matched_keywords"] = matched
+        job["match_tier"] = tier["tier"]
+        job["match_basis"] = tier["basis"]
+        job["experience_evidence"] = tier["experience_evidence"]
+        job["domain_matches"] = tier["domain_matches"]
+        job["experience_cluster_count"] = tier["experience_cluster_count"]
+        job["domain_match_count"] = tier["domain_match_count"]
         job["industry_label"] = industry_label(job, config)
         job["posted_label"] = posting_date_label(job)
         matches.append(job)
     if seniority_excluded:
         LOG.info("Screened out %d listing(s) for explicit experience minimums", seniority_excluded)
-    return sorted(matches, key=lambda job: (-job["fit_score"], str(job.get("created", ""))))
+    tier_priority = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+    return sorted(
+        matches,
+        key=lambda job: (
+            tier_priority.get(str(job.get("match_tier", "LOW")), 2),
+            -int(job.get("experience_cluster_count", 0)),
+            -int(job.get("domain_match_count", 0)),
+            -float(job.get("fit_score", 0)),
+            posting_age_days(job) if posting_age_days(job) is not None else 9999,
+        ),
+    )
 
 
 def safe_url(value: str) -> str:
@@ -986,6 +1003,61 @@ def role_lane(job: dict[str, Any]) -> str:
         return "partner_channel_marketing"
 
     return "marketing_management"
+
+
+def assess_match_tier(job: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    """Classify experience evidence separately from target domain or mission fit."""
+    rules = config.get("scoring", {}).get("match_tiers", {})
+    lane = role_lane(job)
+    lane_rules = rules.get("experience_clusters", {}).get(lane, {})
+    text = normalize(job_text(job))
+    clusters = lane_rules.get("clusters", {})
+    experience_evidence = [
+        str(name) for name, signals in clusters.items() if contains_any(text, signals)
+    ]
+
+    domain_matches = [
+        str(name)
+        for name, signals in rules.get("domain_signals", {}).items()
+        if contains_any(text, signals)
+    ]
+    for industry in matched_industries(job, config):
+        label = industry.replace("_", " ").title()
+        if label not in domain_matches:
+            domain_matches.append(label)
+    if lane == "retail_marketing" and "Retail" not in domain_matches:
+        domain_matches.append("Retail")
+
+    evidence_count = len(experience_evidence)
+    strong_min = int(lane_rules.get("strong_min_clusters", 2))
+    medium_min = int(lane_rules.get("medium_min_clusters", 1))
+    description = str(job.get("description", "")).strip()
+    sparse_description = len(description) < int(rules.get("limited_description_chars", 350))
+
+    if evidence_count >= strong_min and domain_matches:
+        tier = "HIGH"
+        basis = "Strong experience overlap and aligned domain/mission"
+    elif evidence_count >= strong_min:
+        tier = "MEDIUM"
+        basis = "Strong experience overlap; target domain is not stated"
+    elif evidence_count >= medium_min and domain_matches:
+        tier = "MEDIUM"
+        basis = "Relevant experience overlap and aligned domain/mission"
+    elif evidence_count >= medium_min and sparse_description:
+        tier = "MEDIUM"
+        basis = "Relevant experience signal; short description limits confidence"
+    else:
+        tier = "LOW"
+        basis = "Limited role-specific experience evidence"
+
+    return {
+        "tier": tier,
+        "basis": basis,
+        "experience_evidence": experience_evidence,
+        "domain_matches": domain_matches,
+        "experience_cluster_count": evidence_count,
+        "domain_match_count": len(domain_matches),
+    }
 
 
 def role_scope_exclusion(job: dict[str, Any], config: dict[str, Any]) -> str | None:
@@ -1071,12 +1143,20 @@ def format_email(
         sector = str(job.get("industry_label") or "Not specified")
         posted = str(job.get("posted_label") or "Date unavailable")
         link = safe_url(str(job.get("redirect_url", "")))
-        score = job["fit_score"]
+        tier = str(job.get("match_tier", "LOW"))
+        basis = str(job.get("match_basis", "Limited evidence in the listing"))
+        evidence = ", ".join(job.get("experience_evidence", [])) or "No strong skill cluster detected"
+        domain = ", ".join(job.get("domain_matches", [])) or "No direct domain signal detected"
         rationale = str(job.get("rationale") or "")
         rationale_html = (
             f"<br><span style='color:#475467'>{html.escape(rationale)}</span>"
             if rationale
             else ""
+        )
+        match_html = (
+            f"<strong>{html.escape(tier)}</strong><br>"
+            f"<span style='color:#475467'>{html.escape(basis)}</span><br>"
+            f"<small>Experience: {html.escape(evidence)}<br>Domain: {html.escape(domain)}</small>"
         )
         rows_by_lane[lane].append(
             "<tr><td style='padding:12px;border-bottom:1px solid #e5e7eb'>"
@@ -1086,10 +1166,11 @@ def format_email(
             f"<td style='padding:12px;border-bottom:1px solid #e5e7eb'>{html.escape(sector)}</td>"
             f"<td style='padding:12px;border-bottom:1px solid #e5e7eb'>{html.escape(location)}</td>"
             f"<td style='padding:12px;border-bottom:1px solid #e5e7eb'>{html.escape(posted)}</td>"
-            f"<td style='padding:12px;border-bottom:1px solid #e5e7eb;text-align:center'>{score}/10</td></tr>"
+            f"<td style='padding:12px;border-bottom:1px solid #e5e7eb'>{match_html}</td></tr>"
         )
         plain_by_lane[lane].append(
-            f"{title} | {company} | {sector} | {score}/10 | {location} | Posted {posted}\nApply: {link}"
+            f"{title} | {company} | {sector} | {location} | Posted {posted}\n"
+            f"Match: {tier} — {basis}\nExperience evidence: {evidence}\nDomain evidence: {domain}\nApply: {link}"
             + (f"\nWhy it may fit: {rationale}" if rationale else "")
         )
     test_banner = (
@@ -1111,7 +1192,7 @@ def format_email(
                 + "<th align='left' style='padding:12px'>Industry / category</th>"
                 + "<th align='left' style='padding:12px'>Location</th>"
                 + "<th align='left' style='padding:12px'>Posted</th>"
-                + "<th style='padding:12px'>Fit</th></tr></thead><tbody>"
+                + "<th align='left' style='padding:12px'>Match &amp; evidence</th></tr></thead><tbody>"
                 + "".join(lane_rows)
                 + "</tbody></table>"
                 if lane_rows else "<p style='color:#667085'>No matches in this lane today.</p>"
@@ -1128,13 +1209,13 @@ def format_email(
         f"<p>{html.escape(date_label)}</p>"
         + test_banner
         + f"<p>{html.escape(encouragement)}</p>"
-        + f"<p>Your top {len(jobs)} eligible role(s), sorted by fit score within each lane:</p>"
+        + f"<p>Your top {len(jobs)} eligible role(s), grouped by role type and ranked by match tier and experience evidence:</p>"
         + "".join(html_sections)
         + "</body></html>"
     )
     plain = (
         f"{preview_text}\n\n{first_name}'s PMM Job Hunt Fairy — {date_label}\n\n"
-        f"{encouragement}\n\nYour top {len(jobs)} eligible role(s), sorted by fit score within each lane:\n\n"
+        f"{encouragement}\n\nYour top {len(jobs)} eligible role(s), grouped by role type and ranked by match tier and experience evidence:\n\n"
         + "\n\n".join(plain_sections)
     )
     return plain, html_body

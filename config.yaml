@@ -625,7 +625,7 @@ search:
   max_consecutive_failed_pages: 4
   max_age_days: 30
   # Keep adjacent and transferable matches; show up to three roles in each of four lanes.
-  minimum_fit_score: 3.0
+  minimum_fit_score: 0.0
   max_email_results_per_lane: 3
   # Log every job dropped by the title filter. Review for a week, then set to false.
   log_rejected_titles: true
@@ -878,6 +878,245 @@ scoring:
       - stratégie marketing régionale
       - campagnes régionales
       - mix marketing
+  # Match tiers use distinct responsibility clusters. Domain/mission fit is a
+  # separate signal and cannot create a HIGH match without experience evidence.
+  match_tiers:
+    strong_experience_clusters: 2
+    medium_experience_clusters: 1
+    limited_description_chars: 350
+    domain_signals:
+      Consumer / B2C:
+        - B2C
+        - D2C
+        - consumer-facing
+        - consumer marketing
+        - grand public
+        - particuliers
+      B2B2C / Partner:
+        - B2B2C
+        - broker channel
+        - partner channel
+        - channel marketing
+        - marketing partenaires
+        - courtiers
+      B2B:
+        - B2B
+        - business-to-business
+        - BtoB
+      Retail:
+        - retail marketing
+        - trade marketing
+        - shopper marketing
+        - marketing retail
+        - merchandising en magasin
+      Mission / Impact:
+        - B Corp
+        - B Corporation
+        - certified B Corp
+        - entreprise à mission
+        - social impact
+        - impact social
+        - mission-driven
+        - purpose-driven
+        - education technology
+        - educational platform
+        - access to education
+        - éducation
+        - EdTech
+        - sustainability
+        - sustainable development
+        - environmental impact
+        - climate action
+        - transition énergétique
+        - économie circulaire
+    experience_clusters:
+      product_marketing:
+        strong_min_clusters: 2
+        medium_min_clusters: 1
+        clusters:
+          Positioning & Messaging:
+            - product positioning
+            - positioning
+            - value proposition
+            - product messaging
+            - positionnement produit
+            - proposition de valeur
+          GTM & Launch:
+            - go-to-market
+            - go to market
+            - GTM strategy
+            - product launch
+            - launch strategy
+            - lancement produit
+            - stratégie de lancement
+          Customer & Market Research:
+            - customer research
+            - user research
+            - voice of customer
+            - customer insights
+            - market research
+            - recherche utilisateur
+            - insights clients
+          Product & Market Strategy:
+            - product marketing strategy
+            - product strategy
+            - market segmentation
+            - competitive analysis
+            - stratégie produit
+            - segmentation client
+            - analyse concurrentielle
+          Sales & Channel Enablement:
+            - sales enablement
+            - channel enablement
+            - broker enablement
+            - sales training
+            - aide à la vente
+            - accompagnement des courtiers
+      partner_channel_marketing:
+        strong_min_clusters: 2
+        medium_min_clusters: 1
+        clusters:
+          Partner & Broker Management:
+            - partner marketing
+            - broker management
+            - broker channel
+            - partner relationships
+            - brand partnerships
+            - marketing partenaires
+            - gestion des courtiers
+          Partner Enablement & Training:
+            - partner enablement
+            - broker enablement
+            - channel enablement
+            - store staff training
+            - broker training
+            - formation des équipes magasin
+          Co-Marketing & Campaigns:
+            - co-marketing
+            - partner campaigns
+            - co-branded campaigns
+            - joint marketing
+            - campagnes partenaires
+            - campagnes co-brandées
+          Channel Activation:
+            - channel activation
+            - partner activation
+            - broker activation
+            - channel sales enablement
+            - activation des partenaires
+            - activation des courtiers
+          Partner Performance:
+            - partner performance
+            - partner performance analysis
+            - channel performance
+            - partner reporting
+            - performance des partenaires
+            - analyse de la performance partenaires
+      marketing_management:
+        strong_min_clusters: 2
+        medium_min_clusters: 1
+        clusters:
+          Campaign Strategy:
+            - campaign strategy
+            - campaign planning
+            - integrated campaign management
+            - marketing mix
+            - localized marketing
+            - stratégie de campagne
+            - planification de campagnes
+            - mix marketing
+          Campaign Delivery:
+            - campaign development
+            - campaign execution
+            - campaign management
+            - campaign reporting
+            - développement de campagnes
+            - exécution de campagne
+            - reporting de campagne
+          Agency & Creative Leadership:
+            - agency management
+            - creative briefing
+            - creative direction
+            - vendor coordination
+            - agency partner management
+            - gestion d'agence
+            - brief créatif
+            - coordination des prestataires
+          Regional & Brand Marketing:
+            - regional marketing strategy
+            - regional campaigns
+            - seasonal campaigns
+            - brand campaigns
+            - stratégie marketing régionale
+            - campagnes régionales
+            - campagnes saisonnières
+          Events & Field Marketing:
+            - event marketing
+            - experiential marketing
+            - promotional events
+            - trade shows
+            - field marketing
+            - marketing événementiel
+            - événements promotionnels
+            - salons professionnels
+          Consumer Engagement:
+            - consumer engagement
+            - consumer education
+            - customer engagement campaigns
+            - email marketing
+            - engagement des consommateurs
+            - éducation des consommateurs
+      retail_marketing:
+        strong_min_clusters: 2
+        medium_min_clusters: 1
+        clusters:
+          Retail & Shopper Marketing:
+            - retail marketing
+            - trade marketing
+            - shopper marketing
+            - retail partnerships
+            - marketing retail
+            - marketing en magasin
+            - partenariats retail
+          In-Store Activation & Merchandising:
+            - in-store marketing
+            - retail activations
+            - visual merchandising
+            - POS marketing
+            - merchandising compliance
+            - activation en magasin
+            - merchandising visuel
+            - marketing PLV
+            - conformité merchandising
+          Retail Promotions & Campaigns:
+            - retail promotions
+            - seasonal campaigns
+            - retail campaigns
+            - retail promotions
+            - promotions en magasin
+            - campagnes saisonnières
+            - campagnes retail
+          Store & Partner Enablement:
+            - store enablement
+            - store staff training
+            - retail network management
+            - partner enablement
+            - formation des équipes magasin
+            - activation des magasins
+            - gestion du réseau de distribution
+          Omnichannel & Digital Retail:
+            - omnichannel marketing
+            - digital retail marketing
+            - e-commerce partnerships
+            - marketing omnicanal
+            - marketing digital retail
+            - partenariats e-commerce
+          Retail Measurement & Education:
+            - retail performance reporting
+            - merchandising compliance
+            - consumer education
+            - reporting de performance retail
+            - éducation des consommateurs
   profiles:
     balanced:
       direct_experience: 3.25
